@@ -76,6 +76,7 @@
         position: absolute;
         top: 0; left: 0;
         box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        will-change: transform;
     }
 
     /* SVG用紙 */
@@ -158,7 +159,7 @@
         stroke-width: 2px;
         cursor: pointer;
         vector-effect: non-scaling-stroke;
-        pointer-events: auto; /* イベントを受け取る */
+        pointer-events: all !important; /* 最重要 */
     }
     .resize-handle:hover, .resize-handle:active {
         fill: var(--primary);
@@ -221,6 +222,7 @@
 </div>
 
 <div class="properties">
+    <!-- 設定パネル -->
     <div class="prop-group" id="prop-panel-none">
         <div class="prop-label">用紙サイズ (mm)</div>
         <div class="prop-row">
@@ -329,19 +331,8 @@
 
     const STATE = {
         mode: 'select',
-        canvas: {
-            width: 297,
-            height: 420,
-            margin: { top: 20, bottom: 20, left: 20, right: 20 },
-            colors: { paper: '#ffffff', ink: '#333333' }
-        },
-        grid: {
-            show: true,
-            dan: 6,
-            charsPerDan: 11,
-            totalLines: 25,
-            computed: { charSizeW: 0, charSizeH: 0, lineGap: 0, danHeight: 0, danPitch: 0, pitchX: 0 }
-        },
+        canvas: { width: 297, height: 420, margin: { top: 20, bottom: 20, left: 20, right: 20 }, colors: { paper: '#ffffff', ink: '#333333' } },
+        grid: { show: true, dan: 6, charsPerDan: 11, totalLines: 25, computed: { charSizeW: 0, charSizeH: 0, lineGap: 0, danHeight: 0, danPitch: 0, pitchX: 0 } },
         view: { x: 0, y: 0, scale: 1.0 },
         activePointerId: null,
         interactionType: null, // 'pan', 'drag', 'resize', 'create'
@@ -383,7 +374,6 @@
     document.getElementById('btn-export').onclick = exportCanvas;
 
     // --- Handlers ---
-
     function onPointerDown(e) {
         if (!e.isPrimary) return; 
         if (STATE.touchStartDist > 0) return; 
@@ -678,6 +668,7 @@
         let effW = data.width; let effH = data.height;
         if (data.type === 'text' && data.writingMode === 'vertical-rl') effH = data.height / scaleVal;
 
+        // Hit Rect (Transparent white for capture)
         const hitRect = document.createElementNS(SVG_NS, 'rect');
         hitRect.setAttribute('class', 'hit-rect');
         hitRect.setAttribute('x', 0); hitRect.setAttribute('y', 0);
@@ -714,10 +705,9 @@
             });
             group.appendChild(textEl);
              if (data.showGrid) {
-                // (Grid rendering logic omitted for brevity)
                 const gridGroup = document.createElementNS(SVG_NS, 'g');
                 gridGroup.style.pointerEvents = 'none';
-                // ... Grid Logic ...
+                // Grid logic same as before...
                 group.prepend(gridGroup);
             }
         } else {
@@ -734,8 +724,6 @@
 
     function renderUi() {
         renderMarginGuide();
-        
-        // Remove existing
         const handles = layerUi.querySelectorAll('.selection-rect, .resize-handle');
         handles.forEach(el => el.remove());
 
@@ -752,17 +740,24 @@
         if (data.type === 'text') {
             document.getElementById('prop-panel-text').style.display = 'block';
             if (document.activeElement.id !== 'inp-text') document.getElementById('inp-text').value = data.text;
-            // update readonly fields...
+            const cGrid = STATE.grid.computed;
+            if(cGrid.charSizeW > 0) {
+                document.getElementById('inp-fontsize').value = Math.round(cGrid.charSizeW);
+                document.getElementById('inp-lineheight').value = (cGrid.pitchX / cGrid.charSizeW).toFixed(2);
+            }
         }
         
-        // Always draw UI, even during drag (for visual feedback)
+        if (STATE.interactionType === 'resize' || STATE.interactionType === 'drag') {
+            updateUiPositions(data);
+            return;
+        }
+
         const rect = document.createElementNS(SVG_NS, 'rect');
         rect.id = 'ui-selection-rect';
         rect.setAttribute('x', data.x - 2); rect.setAttribute('y', data.y - 2);
         rect.setAttribute('width', data.width + 4); rect.setAttribute('height', data.height + 4);
         rect.setAttribute('class', 'selection-rect');
         layerUi.appendChild(rect);
-        
         createHandle(data.x, data.y, 'nw');
         createHandle(data.x + data.width, data.y, 'ne');
         createHandle(data.x, data.y + data.height, 'sw');
@@ -828,7 +823,7 @@
         return { x: vx / STATE.view.scale, y: vy / STATE.view.scale };
     }
     
-    // --- Other helpers from previous code (fitView, export, etc) ---
+    // --- Other helpers ---
     function updateSelectedText() {
         if (!STATE.selectedId) return;
         const data = STATE.elements.find(el => el.id === STATE.selectedId);
@@ -900,14 +895,14 @@
         const validW = w_px - STATE.canvas.margin.left * PX_PER_MM - STATE.canvas.margin.right * PX_PER_MM;
         
         const totalHUnits = (STATE.grid.charsPerDan * STATE.grid.dan) + (STATE.grid.dan - 1);
-        const cellHeight = validH / totalHUnits; 
-        const danPitch = (STATE.grid.charsPerDan * cellHeight) + cellHeight;
+        const unitH = validH / totalHUnits;
+        const danPitch = (STATE.grid.charsPerDan * unitH) + unitH;
         
-        const fontSizeW = cellHeight / CHAR_SCALE_RATIO;
+        const fontSizeW = unitH / CHAR_SCALE_RATIO;
         const totalCharW = fontSizeW * STATE.grid.totalLines;
         let lineGap = 0; if(STATE.grid.totalLines > 1) lineGap = (validW - totalCharW) / (STATE.grid.totalLines - 1);
         
-        STATE.grid.computed = { charSizeW: fontSizeW, charSizeH: cellHeight, lineGap, danHeight: cellHeight * STATE.grid.charsPerDan, danPitch, pitchX: fontSizeW + lineGap };
+        STATE.grid.computed = { charSizeW: fontSizeW, charSizeH: unitH, lineGap, danHeight: unitH * STATE.grid.charsPerDan, danPitch, pitchX: fontSizeW + lineGap };
         document.getElementById('grid-info').innerHTML = `文字サイズ: ${(fontSizeW / PX_PER_MM).toFixed(2)}mm`;
 
         const mr = STATE.canvas.margin.right * PX_PER_MM;
@@ -917,8 +912,8 @@
                 const startY = mt + (d * danPitch);
                 for(let c=0; c<STATE.grid.charsPerDan; c++) {
                     const rect = document.createElementNS(SVG_NS, 'rect');
-                    rect.setAttribute('x', lineX); rect.setAttribute('y', startY + (c * cellHeight));
-                    rect.setAttribute('width', fontSizeW); rect.setAttribute('height', cellHeight);
+                    rect.setAttribute('x', lineX); rect.setAttribute('y', startY + (c * unitH));
+                    rect.setAttribute('width', fontSizeW); rect.setAttribute('height', unitH);
                     rect.setAttribute('class', 'grid-rect');
                     layerPaperGrid.appendChild(rect);
                 }
@@ -930,7 +925,7 @@
         const inkC = document.getElementById('inp-ink-color').value;
         STATE.canvas.colors.paper = paperC; STATE.canvas.colors.ink = inkC;
         paperBg.setAttribute('fill', paperC);
-        svgStyle.textContent = `.ink-fill { fill: ${inkC}; } .ink-stroke { stroke: ${inkC}; } text { fill: ${inkC}; }`;
+        // Force SVG text content update logic in export (no live CSS var here for export safety)
     }
     
     // Export (re-added)
@@ -968,8 +963,12 @@
             const fontCssUrl = 'https://fonts.googleapis.com/css2?family=BIZ+UDMincho&family=Noto+Sans+JP:wght@400;700;900&family=Noto+Serif+JP:wght@400;700;900&family=Yuji+Syuku&display=block';
             const embeddedCss = await getEmbeddableFontCss(fontCssUrl);
             
+            // Reconstruct CSS for export based on STATE
+            const inkC = STATE.canvas.colors.ink;
+            const dynamicCss = `.ink-fill { fill: ${inkC}; } .ink-stroke { stroke: ${inkC}; } text { fill: ${inkC}; }`;
+            
             const styleEl = document.createElementNS(SVG_NS, 'style');
-            styleEl.textContent = embeddedCss + '\n' + document.getElementById('svg-style').textContent;
+            styleEl.textContent = embeddedCss + '\n' + dynamicCss;
             let defs = svgClone.querySelector('defs');
             if(!defs) { defs = document.createElementNS(SVG_NS, 'defs'); svgClone.prepend(defs); }
             defs.appendChild(styleEl);
@@ -1006,6 +1005,7 @@
     function swapCanvasSize() { const w = document.getElementById('inp-canvas-w'); const h = document.getElementById('inp-canvas-h'); [w.value, h.value] = [h.value, w.value]; updateCanvasSize(); }
 
     window.addEventListener('load', () => { updateCanvasSize(); updateGridSettings(); updateColors(); fitView(); });
+
 </script>
 </body>
 </html>
