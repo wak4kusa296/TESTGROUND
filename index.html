@@ -2,9 +2,8 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>SVG Newspaper Tool Core</title>
-<!-- Google Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=BIZ+UDMincho&family=Noto+Sans+JP:wght@400;700;900&family=Noto+Serif+JP:wght@400;700;900&family=Yuji+Syuku&display=block" rel="stylesheet">
@@ -26,6 +25,8 @@
         background: var(--ui-bg);
         color: var(--text);
         user-select: none;
+        -webkit-user-select: none;
+        touch-action: none;
     }
 
     /* 左サイドバー */
@@ -62,7 +63,9 @@
         background-image: radial-gradient(#ccc 1px, transparent 1px);
         background-size: 20px 20px;
         cursor: default;
+        touch-action: none;
     }
+    .viewport.mode-create { cursor: crosshair; }
     .viewport.hand-mode { cursor: grab; }
     .viewport.hand-mode:active { cursor: grabbing; }
 
@@ -72,6 +75,7 @@
         position: absolute;
         top: 0; left: 0;
         box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        will-change: transform;
     }
 
     /* SVG用紙 */
@@ -81,6 +85,7 @@
         transition: width 0.3s, height 0.3s;
         shape-rendering: geometricPrecision;
         text-rendering: geometricPrecision;
+        overflow: visible;
     }
 
     /* 右サイドバー */
@@ -135,15 +140,27 @@
         pointer-events: none; 
         vector-effect: non-scaling-stroke;
     }
+    
+    /* 生成中のプレビュー矩形 */
+    .creation-preview-rect {
+        fill: rgba(33, 150, 243, 0.2);
+        stroke: var(--primary);
+        stroke-width: 1px;
+        stroke-dasharray: 4 2;
+        pointer-events: none;
+        vector-effect: non-scaling-stroke;
+    }
+
+    /* リサイズハンドル */
     .resize-handle {
         fill: white;
         stroke: var(--primary);
-        stroke-width: 1.5px;
+        stroke-width: 2px;
         cursor: pointer;
         vector-effect: non-scaling-stroke;
-        r: 5px;
+        pointer-events: all !important;
     }
-    .resize-handle:hover {
+    .resize-handle:hover, .resize-handle:active {
         fill: var(--primary);
     }
     .cursor-nw { cursor: nw-resize; }
@@ -160,11 +177,18 @@
         vector-effect: non-scaling-stroke;
     }
     
-    text { user-select: none; }
+    text { user-select: none; pointer-events: none; }
     
     .grid-line { stroke: #b3e5fc; stroke-width: 0.5px; fill: none; pointer-events: none; vector-effect: non-scaling-stroke; }
     .grid-rect { stroke: #b3e5fc; stroke-width: 0.5px; fill: none; pointer-events: none; vector-effect: non-scaling-stroke; }
     .grid-dan-border { stroke: #81d4fa; stroke-width: 1px; fill: none; pointer-events: none; vector-effect: non-scaling-stroke; }
+    
+    /* ボックスのヒットエリア用 */
+    .hit-rect {
+        fill: transparent;
+        cursor: move;
+        pointer-events: all;
+    }
 </style>
 </head>
 <body>
@@ -179,7 +203,7 @@
 
 <div class="viewport" id="viewport">
     <div id="canvas-container">
-        <svg id="main-svg" width="297" height="420" viewBox="0 0 297 420" xmlns="http://www.w3.org/2000/svg">
+        <svg id="main-svg" width="297" height="420" viewBox="0 0 297 420" xmlns="http://www.w3.org/2000/svg" overflow="visible">
             <defs>
                 <style id="svg-style">
                     .ink-fill { fill: #333333; }
@@ -196,6 +220,7 @@
 </div>
 
 <div class="properties">
+    <!-- 設定パネル -->
     <div class="prop-group" id="prop-panel-none">
         <div class="prop-label">用紙サイズ (mm)</div>
         <div class="prop-row">
@@ -303,37 +328,21 @@
     const CHAR_SCALE_RATIO = 0.85;
 
     const STATE = {
-        mode: 'select',
-        canvas: {
-            width: 297,
-            height: 420,
-            margin: { top: 20, bottom: 20, left: 20, right: 20 },
-            colors: { paper: '#ffffff', ink: '#333333' }
-        },
-        grid: {
-            show: true,
-            dan: 6,
-            charsPerDan: 11,
-            totalLines: 25,
-            computed: {
-                charSizeW: 0, 
-                charSizeH: 0,
-                lineGap: 0,
-                danHeight: 0,
-                danPitch: 0,
-                pitchX: 0
-            }
-        },
+        mode: 'select', // select, text, rect
+        canvas: { width: 297, height: 420, margin: { top: 20, bottom: 20, left: 20, right: 20 }, colors: { paper: '#ffffff', ink: '#333333' } },
+        grid: { show: true, dan: 6, charsPerDan: 11, totalLines: 25, computed: { charSizeW: 0, charSizeH: 0, lineGap: 0, danHeight: 0, danPitch: 0, pitchX: 0 } },
         view: { x: 0, y: 0, scale: 1.0 },
-        isSpacePressed: false,
-        isPanning: false,
-        panStart: { x: 0, y: 0 },
+        activePointerId: null,
+        interactionType: null, // 'pan', 'drag', 'resize', 'create'
         selectedId: null,
-        isDragging: false,
-        isResizing: false,
         resizeDir: null,
-        dragStart: { x: 0, y: 0 },
-        elemStart: { x: 0, y: 0 },
+        pointerStart: { x: 0, y: 0 },
+        elemStart: { x: 0, y: 0, w: 0, h: 0 },
+        viewStart: { x: 0, y: 0, scale: 1 },
+        touchStartDist: 0,
+        touchStartCenter: { x: 0, y: 0 },
+        pinchStartCanvas: { x: 0, y: 0 },
+        resizeAnchor: { x: 0, y: 0 },
         elements: [] 
     };
 
@@ -347,276 +356,440 @@
     const paperBg = document.getElementById('paper-bg');
     const svgStyle = document.getElementById('svg-style');
 
-    // ツール切り替え
+    // --- Tool Switching ---
     document.getElementById('btn-select').onclick = () => setMode('select');
-    document.getElementById('btn-text').onclick = () => createTextObject(); 
-    document.getElementById('btn-rect').onclick = () => createRectObject();
+    document.getElementById('btn-text').onclick = () => setMode('text');
+    document.getElementById('btn-rect').onclick = () => setMode('rect');
 
     function setMode(mode) {
         STATE.mode = mode;
         document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+        
         if(mode === 'select') document.getElementById('btn-select').classList.add('active');
-        if(mode !== 'select') setTimeout(() => setMode('select'), 200); 
+        if(mode === 'text') document.getElementById('btn-text').classList.add('active');
+        if(mode === 'rect') document.getElementById('btn-rect').classList.add('active');
+
+        // Cursor style
+        viewport.className = 'viewport';
+        if(mode === 'text' || mode === 'rect') viewport.classList.add('mode-create');
+        
+        // Deselect when switching to creation mode
+        if(mode !== 'select') {
+            STATE.selectedId = null;
+            renderUi();
+        }
     }
 
-    // オブジェクト生成
-    function createID() { return 'el_' + Math.random().toString(36).substr(2, 9); }
+    // --- Pointer Events Unified Handler ---
+    viewport.addEventListener('pointerdown', onPointerDown);
+    viewport.addEventListener('pointermove', onPointerMove);
+    viewport.addEventListener('pointerup', onPointerUp);
+    viewport.addEventListener('pointercancel', onPointerUp);
+    
+    // Multi-touch Pinch (Touch Events)
+    viewport.addEventListener('touchstart', onTouchStart, { passive: false });
+    viewport.addEventListener('touchmove', onTouchMove, { passive: false });
+    viewport.addEventListener('touchend', onTouchEnd);
+    
+    // Wheel
+    viewport.addEventListener('wheel', onWheel, { passive: false });
 
-    function createTextObject() {
-        const vw = viewport.clientWidth; const vh = viewport.clientHeight;
-        const svgX = (vw/2 - STATE.view.x) / STATE.view.scale;
-        const svgY = (vh/2 - STATE.view.y) / STATE.view.scale;
+    function onPointerDown(e) {
+        if (!e.isPrimary) return; 
+        if (STATE.touchStartDist > 0) return; // Ignore if pinching
+
+        const target = e.target;
+        const pt = getSvgPoint(e.clientX, e.clientY);
         
+        STATE.activePointerId = e.pointerId;
+        STATE.pointerStart = { x: e.clientX, y: e.clientY };
+        STATE.viewStart = { ...STATE.view };
+
+        // 1. Resize Handle
+        if (target.classList.contains('resize-handle')) {
+            e.preventDefault();
+            target.setPointerCapture(e.pointerId);
+            STATE.interactionType = 'resize';
+            
+            const classes = target.getAttribute('class');
+            if(classes.includes('cursor-nw')) STATE.resizeDir = 'nw';
+            if(classes.includes('cursor-ne')) STATE.resizeDir = 'ne';
+            if(classes.includes('cursor-sw')) STATE.resizeDir = 'sw';
+            if(classes.includes('cursor-se')) STATE.resizeDir = 'se';
+            
+            const data = STATE.elements.find(el => el.id === STATE.selectedId);
+            STATE.elemStart = { x: data.x, y: data.y, w: data.width, h: data.height };
+            
+            if (STATE.resizeDir === 'nw') STATE.resizeAnchor = { x: data.x + data.width, y: data.y + data.height };
+            if (STATE.resizeDir === 'ne') STATE.resizeAnchor = { x: data.x, y: data.y + data.height };
+            if (STATE.resizeDir === 'sw') STATE.resizeAnchor = { x: data.x + data.width, y: data.y };
+            if (STATE.resizeDir === 'se') STATE.resizeAnchor = { x: data.x, y: data.y };
+            return;
+        }
+
+        // 2. Element Hit (Drag) or Pan
+        let hitElementId = null;
+        if (target.classList.contains('hit-rect')) {
+            hitElementId = target.parentNode.id;
+        }
+
+        if (STATE.mode === 'select') {
+            if (hitElementId) {
+                // Drag Element
+                e.preventDefault();
+                target.setPointerCapture(e.pointerId);
+                STATE.selectedId = hitElementId;
+                STATE.interactionType = 'drag';
+                const data = STATE.elements.find(el => el.id === hitElementId);
+                STATE.elemStart = { x: data.x, y: data.y };
+                renderUi(); 
+            } else {
+                // Pan Viewport
+                STATE.interactionType = 'pan';
+                STATE.selectedId = null; 
+                renderUi();
+                viewport.setPointerCapture(e.pointerId); 
+            }
+        } else {
+            // 3. Create (Text/Rect)
+            e.preventDefault();
+            viewport.setPointerCapture(e.pointerId);
+            STATE.interactionType = 'create';
+            STATE.elemStart = { x: pt.x, y: pt.y };
+            
+            // Snap start point (Right-aligned logic for vertical text)
+            if(STATE.mode === 'text' && STATE.grid.computed.charSizeW > 0) {
+                STATE.elemStart.x = snapX(pt.x, false); // Right edge snap
+                STATE.elemStart.y = snapY(pt.y, true);  // Top edge snap
+            }
+
+            const rect = document.createElementNS(SVG_NS, 'rect');
+            rect.id = 'creation-preview';
+            rect.setAttribute('x', STATE.elemStart.x);
+            rect.setAttribute('y', STATE.elemStart.y);
+            rect.setAttribute('width', 0);
+            rect.setAttribute('height', 0);
+            rect.setAttribute('class', 'creation-preview-rect');
+            layerUi.appendChild(rect);
+        }
+    }
+
+    function onPointerMove(e) {
+        if (e.pointerId !== STATE.activePointerId) return;
+        const pt = getSvgPoint(e.clientX, e.clientY);
+        
+        if (STATE.interactionType === 'pan') {
+            const dx = e.clientX - STATE.pointerStart.x;
+            const dy = e.clientY - STATE.pointerStart.y;
+            STATE.view.x = STATE.viewStart.x + dx;
+            STATE.view.y = STATE.viewStart.y + dy;
+            updateTransform();
+
+        } else if (STATE.interactionType === 'drag') {
+            const dx = (e.clientX - STATE.pointerStart.x) / STATE.view.scale;
+            const dy = (e.clientY - STATE.pointerStart.y) / STATE.view.scale;
+            
+            const data = STATE.elements.find(el => el.id === STATE.selectedId);
+            if (data) {
+                let newX = STATE.elemStart.x + dx;
+                let newY = STATE.elemStart.y + dy;
+                
+                // Snap
+                if (data.type === 'text' && STATE.grid.computed.charSizeW > 0) {
+                     newX = snapX(newX + data.width, false) - data.width;
+                     newY = snapY(newY, true);
+                }
+                
+                data.x = newX; 
+                data.y = newY;
+                updateElementTransform(data);
+                updateUiPositions(data);
+            }
+
+        } else if (STATE.interactionType === 'resize') {
+            const data = STATE.elements.find(el => el.id === STATE.selectedId);
+            if(data) {
+                const anchor = STATE.resizeAnchor;
+                let targetX = pt.x;
+                let targetY = pt.y;
+
+                if (data.type === 'text' && STATE.grid.computed.charSizeW > 0) {
+                    if(STATE.resizeDir.includes('w')) targetX = snapX(targetX, true);
+                    if(STATE.resizeDir.includes('e')) targetX = snapX(targetX, false);
+                    if(STATE.resizeDir.includes('n')) targetY = snapY(targetY, true);
+                    if(STATE.resizeDir.includes('s')) targetY = snapY(targetY, false);
+                }
+                
+                let newW = Math.abs(targetX - anchor.x);
+                let newH = Math.abs(targetY - anchor.y);
+                let newX = Math.min(targetX, anchor.x);
+                let newY = Math.min(targetY, anchor.y);
+                
+                if(newW < 10) newW = 10;
+                if(newH < 10) newH = 10;
+                
+                data.x = newX; data.y = newY; 
+                data.width = newW; data.height = newH;
+                
+                updateElementTransform(data);
+                updateUiPositions(data);
+            }
+
+        } else if (STATE.interactionType === 'create') {
+            const preview = document.getElementById('creation-preview');
+            if(preview) {
+                let currentX = pt.x;
+                let currentY = pt.y;
+                
+                if(STATE.mode === 'text' && STATE.grid.computed.charSizeW > 0) {
+                    // Start was Right/Top snapped.
+                    // Dragging left/down usually.
+                    currentX = snapX(currentX, true); // Snap left edge
+                    currentY = snapY(currentY, false); // Snap bottom edge
+                }
+                
+                const w = Math.abs(currentX - STATE.elemStart.x);
+                const h = Math.abs(currentY - STATE.elemStart.y);
+                const x = Math.min(currentX, STATE.elemStart.x);
+                const y = Math.min(currentY, STATE.elemStart.y);
+
+                preview.setAttribute('x', x);
+                preview.setAttribute('y', y);
+                preview.setAttribute('width', w);
+                preview.setAttribute('height', h);
+            }
+        }
+    }
+
+    function onPointerUp(e) {
+        if (e.pointerId !== STATE.activePointerId) return;
+        
+        if (STATE.interactionType === 'drag' || STATE.interactionType === 'resize') {
+            const data = STATE.elements.find(el => el.id === STATE.selectedId);
+            if (data) {
+                renderElement(data); // Full re-render
+                renderUi();
+            }
+        } else if (STATE.interactionType === 'create') {
+            const preview = document.getElementById('creation-preview');
+            if(preview) {
+                const w = parseFloat(preview.getAttribute('width'));
+                const h = parseFloat(preview.getAttribute('height'));
+                const x = parseFloat(preview.getAttribute('x'));
+                const y = parseFloat(preview.getAttribute('y'));
+                
+                if (w > 10 && h > 10) {
+                    createObjectFromRect({x, y, w, h});
+                }
+                preview.remove();
+            }
+        }
+
+        STATE.activePointerId = null;
+        STATE.interactionType = null;
+        try { e.target.releasePointerCapture(e.pointerId); } catch(err){}
+    }
+
+    // --- Touch (Pinch Zoom Only) ---
+    function onTouchStart(e) {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            STATE.activePointerId = null; // Cancel single pointer action
+            STATE.interactionType = null;
+
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            STATE.touchStartDist = Math.sqrt(dx * dx + dy * dy);
+            
+            const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            
+            STATE.viewStart = { ...STATE.view };
+            const rect = viewport.getBoundingClientRect();
+            const vx = cx - rect.left;
+            const vy = cy - rect.top;
+            
+            STATE.pinchStartCanvas = {
+                x: (vx - STATE.viewStart.x) / STATE.viewStart.scale,
+                y: (vy - STATE.viewStart.y) / STATE.viewStart.scale
+            };
+        }
+    }
+
+    function onTouchMove(e) {
+        if (e.touches.length === 2 && STATE.touchStartDist > 0) {
+            e.preventDefault();
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            const currentDist = Math.sqrt(dx * dx + dy * dy);
+            
+            const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+            const zoomFactor = currentDist / STATE.touchStartDist;
+            let newScale = STATE.viewStart.scale * zoomFactor;
+            newScale = Math.max(0.1, Math.min(newScale, 10.0));
+            
+            const rect = viewport.getBoundingClientRect();
+            const vx = cx - rect.left;
+            const vy = cy - rect.top;
+
+            const newX = vx - (STATE.pinchStartCanvas.x * newScale);
+            const newY = vy - (STATE.pinchStartCanvas.y * newScale);
+            
+            STATE.view.scale = newScale;
+            STATE.view.x = newX;
+            STATE.view.y = newY;
+            updateTransform();
+        }
+    }
+
+    function onTouchEnd(e) {
+        if (e.touches.length < 2) {
+            STATE.touchStartDist = 0;
+        }
+    }
+
+    function onWheel(e) {
+        e.preventDefault();
+        if (e.altKey || e.ctrlKey) {
+            const zoomFactor = 0.05;
+            const delta = -Math.sign(e.deltaY);
+            let newScale = STATE.view.scale * (1 + delta * zoomFactor);
+            newScale = Math.max(0.1, Math.min(newScale, 10.0));
+            const rect = viewport.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const newX = mouseX - (mouseX - STATE.view.x) * (newScale / STATE.view.scale);
+            const newY = mouseY - (mouseY - STATE.view.y) * (newScale / STATE.view.scale);
+            STATE.view.scale = newScale; STATE.view.x = newX; STATE.view.y = newY;
+        } else {
+            STATE.view.x -= e.deltaX; STATE.view.y -= e.deltaY;
+        }
+        updateTransform();
+    }
+
+    // --- Helpers ---
+    function getSvgPoint(clientX, clientY) {
+        const vpRect = viewport.getBoundingClientRect();
+        const vx = clientX - vpRect.left - STATE.view.x;
+        const vy = clientY - vpRect.top - STATE.view.y;
+        return { x: vx / STATE.view.scale, y: vy / STATE.view.scale };
+    }
+
+    function updateElementTransform(data) {
+        const group = document.getElementById(data.id);
+        if(!group) return;
+        const scaleVal = (data.charScale || 85) / 100;
+        let trans = `translate(${data.x}, ${data.y})`;
+        if (data.type === 'text') {
+            if (data.writingMode === 'vertical-rl') trans += ` scale(1, ${scaleVal})`;
+            else trans += ` scale(${scaleVal}, 1)`;
+        }
+        group.setAttribute('transform', trans);
+        const hitRect = group.querySelector('.hit-rect');
+        if (hitRect) {
+            let effW = data.width;
+            let effH = data.height;
+            if (data.type === 'text' && data.writingMode === 'vertical-rl') effH = data.height / scaleVal;
+            hitRect.setAttribute('width', effW);
+            hitRect.setAttribute('height', effH);
+        }
+    }
+
+    function createObjectFromRect(rect) {
+        const id = createID();
         const cGrid = STATE.grid.computed;
         const initFontSize = cGrid.charSizeW > 0 ? cGrid.charSizeW : 24;
         const initLineHeight = cGrid.charSizeW > 0 ? (cGrid.lineGap / cGrid.charSizeW) + 1 : 1.5;
-
-        const id = createID();
-        const data = {
-            id: id, type: 'text',
-            x: Math.round(svgX - 100), y: Math.round(svgY - 150),
-            width: 200, height: 300,
-            text: "ここに記事を入力\n背景グリッドに\nピッタリ合います",
-            fontSize: initFontSize, 
-            lineHeight: initLineHeight,
-            writingMode: 'vertical-rl',
-            fontFamily: '"BIZ UDMincho", serif',
-            charScale: 85, 
-            showGrid: false 
-        };
+        let data;
+        if (STATE.mode === 'text') {
+            data = {
+                id: id, type: 'text',
+                x: rect.x, y: rect.y, width: rect.w, height: rect.h,
+                text: "新規記事",
+                fontSize: initFontSize,
+                lineHeight: initLineHeight,
+                writingMode: 'vertical-rl',
+                fontFamily: '"BIZ UDMincho", serif',
+                charScale: 85,
+                showGrid: false
+            };
+        } else {
+            data = {
+                id: id, type: 'rect',
+                x: rect.x, y: rect.y, width: rect.w, height: rect.h,
+                fill: 'none', stroke: STATE.canvas.colors.ink
+            };
+        }
         STATE.elements.push(data);
         renderElement(data);
+        setMode('select'); // Back to select mode
         selectElement(id);
-        setMode('select');
     }
-
-    function createRectObject() {
-        const vw = viewport.clientWidth; const vh = viewport.clientHeight;
-        const svgX = (vw/2 - STATE.view.x) / STATE.view.scale;
-        const svgY = (vh/2 - STATE.view.y) / STATE.view.scale;
-        const id = createID();
-        const data = {
-            id: id, type: 'rect',
-            x: Math.round(svgX - 50), y: Math.round(svgY - 50),
-            width: 100, height: 100,
-            fill: 'none', stroke: STATE.canvas.colors.ink 
-        };
-        STATE.elements.push(data);
-        renderElement(data);
-        selectElement(id);
-        setMode('select');
-    }
-
-    // 設定更新系
-    function updateCanvasSize() {
-        const w_mm = parseFloat(document.getElementById('inp-canvas-w').value);
-        const h_mm = parseFloat(document.getElementById('inp-canvas-h').value);
-        if (isNaN(w_mm) || isNaN(h_mm)) return;
-
-        STATE.canvas.width = w_mm;
-        STATE.canvas.height = h_mm;
-
-        const w_px = Math.round(w_mm * PX_PER_MM);
-        const h_px = Math.round(h_mm * PX_PER_MM);
-
-        mainSvg.setAttribute('width', w_px);
-        mainSvg.setAttribute('height', h_px);
-        mainSvg.setAttribute('viewBox', `0 0 ${w_px} ${h_px}`);
-        
-        updateMargins();
-    }
-
-    function updateMargins() {
-        STATE.canvas.margin.top = parseFloat(document.getElementById('inp-margin-t').value) || 0;
-        STATE.canvas.margin.bottom = parseFloat(document.getElementById('inp-margin-b').value) || 0;
-        STATE.canvas.margin.left = parseFloat(document.getElementById('inp-margin-l').value) || 0;
-        STATE.canvas.margin.right = parseFloat(document.getElementById('inp-margin-r').value) || 0;
-
-        renderMarginGuide();
-        updateGridSettings(); 
-    }
-
-    function updateColors() {
-        const paperC = document.getElementById('inp-paper-color').value;
-        const inkC = document.getElementById('inp-ink-color').value;
-        STATE.canvas.colors.paper = paperC;
-        STATE.canvas.colors.ink = inkC;
-        paperBg.setAttribute('fill', paperC);
-        svgStyle.textContent = `.ink-fill { fill: ${inkC}; } .ink-stroke { stroke: ${inkC}; } text { fill: ${inkC}; }`;
-    }
-
-    function updateGridSettings() {
-        STATE.grid.show = document.getElementById('inp-layout-show').checked;
-        STATE.grid.dan = parseInt(document.getElementById('inp-layout-dan').value) || 1;
-        STATE.grid.charsPerDan = parseInt(document.getElementById('inp-layout-chars').value) || 1;
-        STATE.grid.totalLines = parseInt(document.getElementById('inp-layout-lines').value) || 1;
-
-        renderPaperGrid();
-        syncAllTextElements();
-    }
-
-    function swapCanvasSize() {
-        const wInput = document.getElementById('inp-canvas-w');
-        const hInput = document.getElementById('inp-canvas-h');
-        const temp = wInput.value;
-        wInput.value = hInput.value;
-        hInput.value = temp;
-        updateCanvasSize();
-    }
-
-    function setCanvasPreset(w, h) {
-        document.getElementById('inp-canvas-w').value = w;
-        document.getElementById('inp-canvas-h').value = h;
-        updateCanvasSize();
-        fitView();
-    }
-
-    // グリッド描画
-    function renderPaperGrid() {
-        layerPaperGrid.innerHTML = ''; 
-        
-        const mt = STATE.canvas.margin.top * PX_PER_MM;
-        const mb = STATE.canvas.margin.bottom * PX_PER_MM;
-        const ml = STATE.canvas.margin.left * PX_PER_MM;
-        const mr = STATE.canvas.margin.right * PX_PER_MM;
-        
-        const w_px = STATE.canvas.width * PX_PER_MM;
-        const h_px = STATE.canvas.height * PX_PER_MM;
-        
-        const validW = w_px - ml - mr;
-        const validH = h_px - mt - mb;
-
-        const danCount = STATE.grid.dan;
-        const charsPerDan = STATE.grid.charsPerDan; 
-        const totalLines = STATE.grid.totalLines;
-
-        // 計算: 縦方向
-        const totalHUnits = (charsPerDan * danCount) + (danCount - 1);
-        const cellHeight = validH / totalHUnits; 
-        const danPitch = (charsPerDan * cellHeight) + cellHeight;
-
-        // 計算: 横方向
-        const fontSizeW = cellHeight / CHAR_SCALE_RATIO;
-        const totalCharW = fontSizeW * totalLines;
-        
-        let lineGap = 0;
-        if (totalLines > 1) {
-            lineGap = (validW - totalCharW) / (totalLines - 1);
-        }
-
-        // 保存
-        STATE.grid.computed.charSizeW = fontSizeW;
-        STATE.grid.computed.charSizeH = cellHeight;
-        STATE.grid.computed.lineGap = lineGap;
-        STATE.grid.computed.danHeight = cellHeight * charsPerDan;
-        STATE.grid.computed.danPitch = danPitch;
-        STATE.grid.computed.pitchX = fontSizeW + lineGap;
-
-        // 情報表示
-        const fontSizeMm = (fontSizeW / PX_PER_MM).toFixed(2);
-        const gapMm = (lineGap / PX_PER_MM).toFixed(2);
-        document.getElementById('grid-info').innerHTML = `文字サイズ: ${fontSizeMm}mm / 行間: ${gapMm}mm`;
-
-        if (!STATE.grid.show) return;
-
-        // 描画
-        for (let l = 0; l < totalLines; l++) {
-            const lineX = (w_px - mr) - fontSizeW - (l * (fontSizeW + lineGap));
-            
-            for (let d = 0; d < danCount; d++) {
-                const startY = mt + (d * danPitch);
-                for (let c = 0; c < charsPerDan; c++) {
-                    const charY = startY + (c * cellHeight);
-                    const rect = document.createElementNS(SVG_NS, 'rect');
-                    rect.setAttribute('x', lineX);
-                    rect.setAttribute('y', charY);
-                    rect.setAttribute('width', fontSizeW);
-                    rect.setAttribute('height', cellHeight);
-                    rect.setAttribute('class', 'grid-rect');
-                    layerPaperGrid.appendChild(rect);
-                }
-            }
-        }
-        // 段間線
-        for (let d = 0; d < danCount - 1; d++) {
-            const y = mt + (d * danPitch) + (charsPerDan * cellHeight) + (cellHeight / 2);
-            const line = document.createElementNS(SVG_NS, 'line');
-            line.setAttribute('x1', ml); line.setAttribute('x2', w_px - mr);
-            line.setAttribute('y1', y); line.setAttribute('y2', y);
-            line.setAttribute('class', 'grid-dan-border');
-            layerPaperGrid.appendChild(line);
-        }
-    }
-
-    function renderMarginGuide() {
-        const oldGuide = document.getElementById('margin-guide-rect');
-        if (oldGuide) oldGuide.remove();
-
-        const w_px = STATE.canvas.width * PX_PER_MM;
-        const h_px = STATE.canvas.height * PX_PER_MM;
-        const mt = STATE.canvas.margin.top * PX_PER_MM;
-        const mb = STATE.canvas.margin.bottom * PX_PER_MM;
-        const ml = STATE.canvas.margin.left * PX_PER_MM;
-        const mr = STATE.canvas.margin.right * PX_PER_MM;
-
-        const rect = document.createElementNS(SVG_NS, 'rect');
-        rect.id = 'margin-guide-rect';
-        rect.setAttribute('x', ml); rect.setAttribute('y', mt);
-        rect.setAttribute('width', Math.max(0, w_px - ml - mr));
-        rect.setAttribute('height', Math.max(0, h_px - mt - mb));
-        rect.setAttribute('class', 'margin-guide');
-        layerUi.appendChild(rect);
-    }
-
-    function syncAllTextElements() {
+    
+    function createID() { return 'el_' + Math.random().toString(36).substr(2, 9); }
+    
+    // Snap Logic
+    function snapX(rawX, isLeftEdge) {
         const cGrid = STATE.grid.computed;
-        if (cGrid.charSizeW <= 0) return;
-        const newFontSize = cGrid.charSizeW;
-        const newLineHeight = (cGrid.charSizeW + cGrid.lineGap) / cGrid.charSizeW;
+        if (cGrid.charSizeW <= 0) return rawX;
+        const mr = STATE.canvas.margin.right * PX_PER_MM;
+        const w_px = STATE.canvas.width * PX_PER_MM;
+        const rightEdge = w_px - mr;
+        const pitchX = cGrid.pitchX;
 
-        STATE.elements.forEach(data => {
-            if (data.type === 'text') {
-                data.fontSize = newFontSize;
-                data.lineHeight = newLineHeight;
-                data.writingMode = 'vertical-rl';
-                data.charScale = 85;
-                renderElement(data);
-            }
-        });
-        if(STATE.selectedId) renderUi();
+        if (isLeftEdge) {
+            const col = Math.round((rightEdge - cGrid.charSizeW - rawX) / pitchX);
+            return rightEdge - (col * pitchX) - cGrid.charSizeW;
+        } else {
+            const col = Math.round((rightEdge - rawX) / pitchX);
+            return rightEdge - (col * pitchX);
+        }
     }
 
-    // 要素レンダリング
+    function snapY(rawY, isTopEdge) {
+        const cGrid = STATE.grid.computed;
+        if (cGrid.charSizeH <= 0) return rawY;
+        const mt = STATE.canvas.margin.top * PX_PER_MM;
+        const relY = rawY - mt;
+        const danIndex = Math.floor(relY / cGrid.danPitch);
+        const danStart = mt + (danIndex * cGrid.danPitch);
+        const relYInDan = rawY - danStart;
+        const charIndex = Math.round(relYInDan / cGrid.charSizeH);
+        return danStart + (charIndex * cGrid.charSizeH);
+    }
+
+    // --- Core Rendering & UI logic (Same as before) ---
     function renderElement(data) {
         let group = document.getElementById(data.id);
         if (!group) {
             group = document.createElementNS(SVG_NS, 'g');
             group.id = data.id;
-            group.addEventListener('mousedown', (e) => onElemMouseDown(e, data.id));
             layerContent.appendChild(group);
         }
-
         const scaleVal = (data.charScale || 85) / 100;
-        
-        if (data.type === 'text') {
-            group.setAttribute('transform', `translate(${data.x}, ${data.y}) scale(1, ${scaleVal})`);
-        } else {
-            group.setAttribute('transform', `translate(${data.x}, ${data.y})`);
-        }
+        let trans = `translate(${data.x}, ${data.y})`;
+        if (data.type === 'text' && data.writingMode === 'vertical-rl') trans += ` scale(1, ${scaleVal})`;
+        group.setAttribute('transform', trans);
         group.innerHTML = '';
         
+        let effW = data.width;
+        let effH = data.height;
+        if (data.type === 'text' && data.writingMode === 'vertical-rl') effH = data.height / scaleVal;
+
+        const hitRect = document.createElementNS(SVG_NS, 'rect');
+        hitRect.setAttribute('class', 'hit-rect');
+        hitRect.setAttribute('x', 0); hitRect.setAttribute('y', 0);
+        hitRect.setAttribute('width', effW); hitRect.setAttribute('height', effH);
+        group.appendChild(hitRect);
+
         if (data.type === 'text') {
             const cGrid = STATE.grid.computed;
             let drawFontSize = data.fontSize;
             let drawPitchX = data.fontSize * data.lineHeight;
-            if (cGrid.charSizeW > 0) {
-                drawFontSize = cGrid.charSizeW;
-                drawPitchX = cGrid.pitchX; 
-            }
-
-            const effW = data.width;
-            const effH = data.height / scaleVal;
-
+            if (cGrid.charSizeW > 0) { drawFontSize = cGrid.charSizeW; drawPitchX = cGrid.pitchX; }
+            
             const textEl = document.createElementNS(SVG_NS, 'text');
             textEl.setAttribute('font-family', data.fontFamily);
             textEl.setAttribute('font-size', drawFontSize);
@@ -625,6 +798,7 @@
             textEl.setAttribute('text-anchor', 'middle');
             textEl.setAttribute('class', 'ink-fill'); 
             textEl.style.fontFamily = data.fontFamily;
+            textEl.style.pointerEvents = 'none'; 
             
             const lines = data.text.split('\n');
             lines.forEach((lineText, i) => {
@@ -632,61 +806,33 @@
                 chars.forEach((char, j) => {
                     const tspan = document.createElementNS(SVG_NS, 'tspan');
                     tspan.textContent = char;
-                    
                     const centerX = effW - (drawFontSize / 2) - (i * drawPitchX);
                     const centerY = (j * drawFontSize) + (drawFontSize / 2);
-                    
                     tspan.setAttribute('x', centerX); tspan.setAttribute('y', centerY);
                     textEl.appendChild(tspan);
                 });
             });
             group.appendChild(textEl);
-
-            if (data.showGrid) {
-                const gridGroup = document.createElementNS(SVG_NS, 'g');
-                gridGroup.style.pointerEvents = 'none';
-                
-                const cols = Math.floor(effW / drawPitchX);
-                const rows = Math.floor(effH / drawFontSize);
-                for (let c = 0; c < cols; c++) {
-                    const centerX = effW - (drawFontSize / 2) - (c * drawPitchX);
-                    const cellX = centerX - (drawFontSize / 2);
-                    for (let r = 0; r < rows; r++) {
-                        const centerY = (r * drawFontSize) + (drawFontSize / 2);
-                        const cellY = centerY - (drawFontSize / 2);
-                        const rect = document.createElementNS(SVG_NS, 'rect');
-                        rect.setAttribute('x', cellX); rect.setAttribute('y', cellY);
-                        rect.setAttribute('width', drawFontSize); rect.setAttribute('height', drawFontSize);
-                        rect.setAttribute('class', 'grid-rect');
-                        gridGroup.appendChild(rect);
-                    }
-                }
-                group.prepend(gridGroup);
-            }
-
-        } else if (data.type === 'rect') {
+        } else {
             const rect = document.createElementNS(SVG_NS, 'rect');
-            rect.setAttribute('x', 0); rect.setAttribute('y', 0);
             rect.setAttribute('width', data.width); 
             rect.setAttribute('height', data.height);
             rect.setAttribute('fill', data.fill); 
             rect.setAttribute('stroke', STATE.canvas.colors.ink); 
-            rect.setAttribute('class', 'ink-stroke'); 
+            rect.setAttribute('class', 'ink-stroke');
+            rect.style.pointerEvents = 'none';
             group.appendChild(rect);
         }
     }
 
-    // UI更新
     function renderUi() {
-        layerUi.innerHTML = ''; 
-        renderMarginGuide();
-
         if (!STATE.selectedId) {
             document.getElementById('prop-panel-none').style.display = 'block';
             document.getElementById('prop-panel-text').style.display = 'none';
+            layerUi.innerHTML = ''; 
+            renderMarginGuide();
             return;
         }
-
         const data = STATE.elements.find(e => e.id === STATE.selectedId);
         if (!data) return;
 
@@ -694,417 +840,219 @@
         if (data.type === 'text') {
             document.getElementById('prop-panel-text').style.display = 'block';
             if (document.activeElement.id !== 'inp-text') document.getElementById('inp-text').value = data.text;
-            
             const cGrid = STATE.grid.computed;
             if(cGrid.charSizeW > 0) {
                 document.getElementById('inp-fontsize').value = Math.round(cGrid.charSizeW);
                 document.getElementById('inp-lineheight').value = (cGrid.pitchX / cGrid.charSizeW).toFixed(2);
-            } else {
-                document.getElementById('inp-fontsize').value = data.fontSize;
-                document.getElementById('inp-lineheight').value = data.lineHeight;
             }
-            
-            document.getElementById('inp-fontfamily').value = data.fontFamily || '"BIZ UDMincho", serif';
-            document.getElementById('inp-showgrid').checked = data.showGrid || false;
         }
 
+        if (STATE.interactionType === 'resize' || STATE.interactionType === 'drag') {
+            updateUiPositions(data);
+            return;
+        }
+        layerUi.innerHTML = '';
+        renderMarginGuide();
         const rect = document.createElementNS(SVG_NS, 'rect');
+        rect.id = 'ui-selection-rect';
         rect.setAttribute('x', data.x - 2); rect.setAttribute('y', data.y - 2);
         rect.setAttribute('width', data.width + 4); rect.setAttribute('height', data.height + 4);
         rect.setAttribute('class', 'selection-rect');
         layerUi.appendChild(rect);
-        
         createHandle(data.x, data.y, 'nw');
         createHandle(data.x + data.width, data.y, 'ne');
         createHandle(data.x, data.y + data.height, 'sw');
         createHandle(data.x + data.width, data.y + data.height, 'se');
     }
 
+    function updateUiPositions(data) {
+        const rect = document.getElementById('ui-selection-rect');
+        if(rect) {
+            rect.setAttribute('x', data.x - 2); rect.setAttribute('y', data.y - 2);
+            rect.setAttribute('width', data.width + 4); rect.setAttribute('height', data.height + 4);
+        }
+        const hNW = layerUi.querySelector('.cursor-nw');
+        if(hNW) { hNW.setAttribute('cx', data.x); hNW.setAttribute('cy', data.y); }
+        const hNE = layerUi.querySelector('.cursor-ne');
+        if(hNE) { hNE.setAttribute('cx', data.x + data.width); hNE.setAttribute('cy', data.y); }
+        const hSW = layerUi.querySelector('.cursor-sw');
+        if(hSW) { hSW.setAttribute('cx', data.x); hSW.setAttribute('cy', data.y + data.height); }
+        const hSE = layerUi.querySelector('.cursor-se');
+        if(hSE) { hSE.setAttribute('cx', data.x + data.width); hSE.setAttribute('cy', data.y + data.height); }
+    }
+
     function createHandle(x, y, dir) {
         const circle = document.createElementNS(SVG_NS, 'circle');
         circle.setAttribute('cx', x); circle.setAttribute('cy', y);
+        circle.setAttribute('r', 15); 
         circle.setAttribute('class', `resize-handle cursor-${dir}`);
-        circle.addEventListener('mousedown', (e) => onHandleMouseDown(e, dir));
         layerUi.appendChild(circle);
     }
-
-    function selectElement(id) {
-        STATE.selectedId = id;
-        renderUi();
-    }
-    
-    function deleteSelected() {
-        if (!STATE.selectedId) return;
-        document.getElementById(STATE.selectedId).remove(); 
-        STATE.elements = STATE.elements.filter(e => e.id !== STATE.selectedId);
-        STATE.selectedId = null;
-        renderUi();
-    }
-
-    function onElemMouseDown(e, id) {
-        if (STATE.isSpacePressed) return;
-        e.stopPropagation();
-        selectElement(id);
-        STATE.isDragging = true;
-        const pt = getSvgPoint(e);
-        STATE.dragStart = { x: pt.x, y: pt.y };
-        const data = STATE.elements.find(el => el.id === id);
-        STATE.elemStart = { x: data.x, y: data.y };
-    }
-
-    function onHandleMouseDown(e, dir) {
-        if (STATE.isSpacePressed) return;
-        e.stopPropagation();
-        STATE.isResizing = true;
-        STATE.resizeDir = dir;
-        const pt = getSvgPoint(e);
-        STATE.dragStart = { x: pt.x, y: pt.y };
-        const data = STATE.elements.find(el => el.id === STATE.selectedId);
-        STATE.elemStart = { x: data.x, y: data.y, w: data.width, h: data.height };
-    }
-
-    function getSvgPoint(e) {
-        const vpRect = viewport.getBoundingClientRect();
-        const vx = e.clientX - vpRect.left - STATE.view.x;
-        const vy = e.clientY - vpRect.top - STATE.view.y;
-        return { x: vx / STATE.view.scale, y: vy / STATE.view.scale };
-    }
-
-    window.addEventListener('mousemove', (e) => {
-        if (STATE.isPanning) {
-            STATE.view.x = STATE.viewStart.x + (e.clientX - STATE.panStart.x);
-            STATE.view.y = STATE.viewStart.y + (e.clientY - STATE.panStart.y);
-            updateTransform();
-            return;
-        }
-        
-        const pt = getSvgPoint(e);
-        const dx = pt.x - STATE.dragStart.x;
-        const dy = pt.y - STATE.dragStart.y;
-        const data = STATE.elements.find(el => el.id === STATE.selectedId);
-
-        if (STATE.isDragging && data) {
-            let newX = STATE.elemStart.x + dx;
-            let newY = STATE.elemStart.y + dy;
-            
-            if (data.type === 'text') {
-                const cGrid = STATE.grid.computed;
-                if (cGrid.charSizeW > 0) {
-                    const mr = STATE.canvas.margin.right * PX_PER_MM;
-                    const w_px = STATE.canvas.width * PX_PER_MM;
-                    const rightEdge = w_px - mr;
-                    const pitchX = cGrid.pitchX; 
-                    
-                    const currentRight = newX + data.width;
-                    const colIndex = Math.round((rightEdge - currentRight) / pitchX);
-                    const snappedRight = rightEdge - (colIndex * pitchX);
-                    newX = snappedRight - data.width;
-
-                    const mt = STATE.canvas.margin.top * PX_PER_MM;
-                    const relY = newY - mt;
-                    const danIndex = Math.floor(relY / cGrid.danPitch);
-                    const danStart = mt + (danIndex * cGrid.danPitch);
-                    const relYInDan = newY - danStart;
-                    const charIndexInDan = Math.round(relYInDan / cGrid.charSizeH);
-                    newY = danStart + (charIndexInDan * cGrid.charSizeH);
-                }
-            }
-            data.x = newX;
-            data.y = newY;
-            renderElement(data);
-            renderUi();
-
-        } else if (STATE.isResizing && data) {
-            const dir = STATE.resizeDir;
-            let newX = STATE.elemStart.x;
-            let newY = STATE.elemStart.y;
-            let newW = STATE.elemStart.w;
-            let newH = STATE.elemStart.h;
-
-            if (dir.includes('e')) newW = Math.max(10, STATE.elemStart.w + dx);
-            if (dir.includes('s')) newH = Math.max(10, STATE.elemStart.h + dy);
-            if (dir.includes('w')) {
-                const w = Math.max(10, STATE.elemStart.w - dx);
-                newX = STATE.elemStart.x + (STATE.elemStart.w - w);
-                newW = w;
-            }
-            if (dir.includes('n')) {
-                const h = Math.max(10, STATE.elemStart.h - dy);
-                newY = STATE.elemStart.y + (STATE.elemStart.h - h);
-                newH = h;
-            }
-
-            if (data.type === 'text') {
-                const cGrid = STATE.grid.computed;
-                if (cGrid.charSizeW > 0) {
-                    const mr = STATE.canvas.margin.right * PX_PER_MM;
-                    const w_px = STATE.canvas.width * PX_PER_MM;
-                    const rightEdge = w_px - mr;
-                    const pitchX = cGrid.pitchX;
-                    const mt = STATE.canvas.margin.top * PX_PER_MM;
-
-                    if (dir.includes('w')) {
-                        const currentRight = newX + newW;
-                        const colN = Math.round((rightEdge - cGrid.charSizeW - newX) / pitchX);
-                        const snappedX = rightEdge - (colN * pitchX) - cGrid.charSizeW;
-                        newW = currentRight - snappedX;
-                        newX = snappedX;
-                    }
-                    if (dir.includes('e')) {
-                        const currentLeft = newX;
-                        const currentRight = newX + newW;
-                        const colN = Math.round((rightEdge - currentRight) / pitchX);
-                        const snappedRight = rightEdge - (colN * pitchX);
-                        newW = snappedRight - currentLeft;
-                    }
-                    if (dir.includes('n')) {
-                        const currentBottom = newY + newH;
-                        const rowN = Math.round((newY - mt) / cGrid.charSizeH);
-                        const snappedY = mt + (rowN * cGrid.charSizeH);
-                        newH = currentBottom - snappedY;
-                        newY = snappedY;
-                    }
-                    if (dir.includes('s')) {
-                        const currentTop = newY;
-                        const currentBottom = newY + newH;
-                        const rowN = Math.round((currentBottom - mt) / cGrid.charSizeH);
-                        const snappedBottom = mt + (rowN * cGrid.charSizeH);
-                        newH = snappedBottom - currentTop;
-                    }
-                }
-            }
-            if(newW < 10) newW = 10;
-            if(newH < 10) newH = 10;
-            data.x = newX; data.y = newY; data.width = newW; data.height = newH;
-            renderElement(data);
-            renderUi();
-        }
-    });
-
-    mainSvg.addEventListener('mousedown', (e) => {
-        if (STATE.isSpacePressed) return;
-        if (e.target === mainSvg) {
-            STATE.selectedId = null;
-            renderUi();
-        }
-    });
-
-    viewport.addEventListener('mousedown', (e) => {
-        if (STATE.isSpacePressed || e.button === 1) {
-            e.preventDefault();
-            STATE.isPanning = true;
-            STATE.panStart = { x: e.clientX, y: e.clientY };
-            STATE.viewStart = { x: STATE.view.x, y: STATE.view.y };
-        }
-    });
-    window.addEventListener('mouseup', () => {
-        STATE.isPanning = false; 
-        STATE.isDragging = false; 
-        STATE.isResizing = false;
-    });
-    viewport.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        if (e.altKey || e.ctrlKey) {
-            const zoomFactor = 0.05;
-            const delta = -Math.sign(e.deltaY);
-            let newScale = STATE.view.scale * (1 + delta * zoomFactor);
-            newScale = Math.max(0.1, Math.min(newScale, 10.0));
-            const rect = viewport.getBoundingClientRect();
-            const offsetX = (e.clientX - rect.left) - STATE.view.x;
-            const offsetY = (e.clientY - rect.top) - STATE.view.y;
-            STATE.view.x -= offsetX * (newScale / STATE.view.scale - 1);
-            STATE.view.y -= offsetY * (newScale / STATE.view.scale - 1);
-            STATE.view.scale = newScale;
-        } else {
-            STATE.view.x -= e.deltaX;
-            STATE.view.y -= e.deltaY;
-        }
+    function selectElement(id) { STATE.selectedId = id; renderUi(); }
+    function deleteSelected() { if (!STATE.selectedId) return; document.getElementById(STATE.selectedId).remove(); STATE.elements = STATE.elements.filter(e => e.id !== STATE.selectedId); STATE.selectedId = null; renderUi(); }
+    function fitView() {
+        const vw = viewport.clientWidth; const vh = viewport.clientHeight;
+        const w_px = STATE.canvas.width * PX_PER_MM; const h_px = STATE.canvas.height * PX_PER_MM;
+        const margin = 40;
+        const scale = Math.min((vw - margin*2) / w_px, (vh - margin*2) / h_px);
+        STATE.view.scale = Math.max(0.1, Math.min(scale, 5.0));
+        STATE.view.x = (vw - w_px * STATE.view.scale) / 2; STATE.view.y = (vh - h_px * STATE.view.scale) / 2;
         updateTransform();
-    }, { passive: false });
-    window.addEventListener('keydown', (e) => {
-        if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
-        if (e.code === 'Space' && !STATE.isSpacePressed) {
-            STATE.isSpacePressed = true;
-            viewport.classList.add('hand-mode');
-        }
-        if ((e.key === 'Delete' || e.key === 'Backspace') && STATE.selectedId) deleteSelected();
-        if (!e.ctrlKey && !e.metaKey && !STATE.isSpacePressed) {
-            if (e.key === 'v') setMode('select');
-            if (e.key === 't') createTextObject();
-            if (e.key === 'r') createRectObject();
-            if (e.key === '0' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); fitView(); }
-        }
-    });
-    window.addEventListener('keyup', (e) => {
-        if (e.code === 'Space') {
-            STATE.isSpacePressed = false;
-            STATE.isPanning = false;
-            viewport.classList.remove('hand-mode');
-        }
-    });
-
-    function updateTransform() {
-        canvasContainer.style.transform = `translate(${STATE.view.x}px, ${STATE.view.y}px) scale(${STATE.view.scale})`;
     }
-    
-    // ヘルパー: URLからBlobを取得しBase64に変換
-    async function urlToBase64(url) {
-        try {
-            const res = await fetch(url);
-            const blob = await res.blob();
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-        } catch (e) {
-            console.warn('Font fetch failed:', url, e);
-            return null;
-        }
+    function updateTransform() { canvasContainer.style.transform = `translate(${STATE.view.x}px, ${STATE.view.y}px) scale(${STATE.view.scale})`; }
+    function updateCanvasSize() {
+        const w = parseFloat(document.getElementById('inp-canvas-w').value);
+        const h = parseFloat(document.getElementById('inp-canvas-h').value);
+        STATE.canvas.width = w; STATE.canvas.height = h;
+        mainSvg.setAttribute('width', w * PX_PER_MM); mainSvg.setAttribute('height', h * PX_PER_MM);
+        mainSvg.setAttribute('viewBox', `0 0 ${w * PX_PER_MM} ${h * PX_PER_MM}`);
+        updateMargins();
     }
+    function updateMargins() {
+        STATE.canvas.margin.top = parseFloat(document.getElementById('inp-margin-t').value);
+        STATE.canvas.margin.bottom = parseFloat(document.getElementById('inp-margin-b').value);
+        STATE.canvas.margin.left = parseFloat(document.getElementById('inp-margin-l').value);
+        STATE.canvas.margin.right = parseFloat(document.getElementById('inp-margin-r').value);
+        renderMarginGuide(); updateGridSettings();
+    }
+    function updateGridSettings() { 
+        STATE.grid.show = document.getElementById('inp-layout-show').checked;
+        STATE.grid.dan = parseInt(document.getElementById('inp-layout-dan').value);
+        STATE.grid.charsPerDan = parseInt(document.getElementById('inp-layout-chars').value);
+        STATE.grid.totalLines = parseInt(document.getElementById('inp-layout-lines').value);
+        renderPaperGrid(); syncAllTextElements();
+    }
+    function renderMarginGuide() {
+        const old = document.getElementById('margin-guide-rect'); if(old) old.remove();
+        const mt = STATE.canvas.margin.top * PX_PER_MM;
+        const ml = STATE.canvas.margin.left * PX_PER_MM;
+        const w = STATE.canvas.width * PX_PER_MM;
+        const h = STATE.canvas.height * PX_PER_MM;
+        const rect = document.createElementNS(SVG_NS, 'rect');
+        rect.id = 'margin-guide-rect';
+        rect.setAttribute('x', ml); rect.setAttribute('y', mt);
+        rect.setAttribute('width', w - ml - STATE.canvas.margin.right*PX_PER_MM);
+        rect.setAttribute('height', h - mt - STATE.canvas.margin.bottom*PX_PER_MM);
+        rect.setAttribute('class', 'margin-guide');
+        layerUi.appendChild(rect);
+    }
+    function renderPaperGrid() {
+        layerPaperGrid.innerHTML = '';
+        if(!STATE.grid.show) return;
+        const mt = STATE.canvas.margin.top * PX_PER_MM;
+        const w_px = STATE.canvas.width * PX_PER_MM; const h_px = STATE.canvas.height * PX_PER_MM;
+        const validH = h_px - mt - STATE.canvas.margin.bottom * PX_PER_MM;
+        const validW = w_px - STATE.canvas.margin.left * PX_PER_MM - STATE.canvas.margin.right * PX_PER_MM;
+        
+        const totalHUnits = (STATE.grid.charsPerDan * STATE.grid.dan) + (STATE.grid.dan - 1);
+        const cellHeight = validH / totalHUnits; 
+        const danPitch = (STATE.grid.charsPerDan * cellHeight) + cellHeight;
+        const fontSizeW = cellHeight / CHAR_SCALE_RATIO;
+        const totalCharW = fontSizeW * STATE.grid.totalLines;
+        let lineGap = 0; if(STATE.grid.totalLines > 1) lineGap = (validW - totalCharW) / (STATE.grid.totalLines - 1);
+        
+        STATE.grid.computed = { charSizeW: fontSizeW, charSizeH: cellHeight, lineGap, danHeight: cellHeight * STATE.grid.charsPerDan, danPitch, pitchX: fontSizeW + lineGap };
+        
+        document.getElementById('grid-info').innerHTML = `文字サイズ: ${(fontSizeW / PX_PER_MM).toFixed(2)}mm`;
 
-    // ヘルパー: Google Fonts CSS内のURLをBase64化
-    async function getEmbeddableFontCss(cssUrl) {
-        try {
-            const res = await fetch(cssUrl);
-            let cssText = await res.text();
-            
-            const urlRegex = /url\((['"]?)(https:\/\/[^'"\)]+)\1\)/g;
-            let match;
-            const replacements = [];
-
-            while ((match = urlRegex.exec(cssText)) !== null) {
-                replacements.push({
-                    original: match[0],
-                    url: match[2]
-                });
+        const mr = STATE.canvas.margin.right * PX_PER_MM;
+        for(let l=0; l<STATE.grid.totalLines; l++) {
+            const lineX = (w_px - mr) - fontSizeW - (l * STATE.grid.computed.pitchX);
+            for(let d=0; d<STATE.grid.dan; d++) {
+                const startY = mt + (d * danPitch);
+                for(let c=0; c<STATE.grid.charsPerDan; c++) {
+                    const rect = document.createElementNS(SVG_NS, 'rect');
+                    rect.setAttribute('x', lineX); rect.setAttribute('y', startY + (c * cellHeight));
+                    rect.setAttribute('width', fontSizeW); rect.setAttribute('height', cellHeight);
+                    rect.setAttribute('class', 'grid-rect');
+                    layerPaperGrid.appendChild(rect);
+                }
             }
-
+        }
+    }
+    function updateColors() { 
+        const paperC = document.getElementById('inp-paper-color').value;
+        const inkC = document.getElementById('inp-ink-color').value;
+        STATE.canvas.colors.paper = paperC; STATE.canvas.colors.ink = inkC;
+        paperBg.setAttribute('fill', paperC);
+        svgStyle.textContent = `.ink-fill { fill: ${inkC}; } .ink-stroke { stroke: ${inkC}; } text { fill: ${inkC}; }`;
+    }
+    function updateSelectedText() {
+        const data = STATE.elements.find(e => e.id === STATE.selectedId);
+        if(data) { data.text = document.getElementById('inp-text').value; renderElement(data); }
+    }
+    function updateSelectedStyle() {
+         const data = STATE.elements.find(e => e.id === STATE.selectedId);
+         if(data) {
+             data.fontFamily = document.getElementById('inp-fontfamily').value;
+             data.showGrid = document.getElementById('inp-showgrid').checked;
+             renderElement(data); renderUi();
+         }
+    }
+    async function urlToBase64(url) {
+        try { const res = await fetch(url); const blob = await res.blob();
+            return new Promise(r => { const reader = new FileReader(); reader.onloadend = () => r(reader.result); reader.readAsDataURL(blob); });
+        } catch { return null; }
+    }
+    async function getEmbeddableFontCss(cssUrl) {
+        try { const res = await fetch(cssUrl); let cssText = await res.text();
+            const urlRegex = /url\((['"]?)(https:\/\/[^'"\)]+)\1\)/g; let match; const replacements = [];
+            while ((match = urlRegex.exec(cssText)) !== null) replacements.push({ original: match[0], url: match[2] });
             const uniqueUrls = [...new Set(replacements.map(r => r.url))];
             const base64Map = {};
-            
-            await Promise.all(uniqueUrls.map(async (url) => {
-                const base64 = await urlToBase64(url);
-                if (base64) base64Map[url] = base64;
-            }));
-
-            for (const rep of replacements) {
-                if (base64Map[rep.url]) {
-                    cssText = cssText.split(rep.original).join(`url("${base64Map[rep.url]}")`);
-                }
-            }
+            await Promise.all(uniqueUrls.map(async (url) => { const b64 = await urlToBase64(url); if(b64) base64Map[url] = b64; }));
+            for (const rep of replacements) if (base64Map[rep.url]) cssText = cssText.split(rep.original).join(`url("${base64Map[rep.url]}")`);
             return cssText;
-        } catch (e) {
-            console.warn('CSS processing failed:', e);
-            return '';
-        }
+        } catch { return ''; }
     }
-
     async function exportCanvas() {
-        // UI非表示 (一時的)
-        layerUi.style.display = 'none';
-        layerPaperGrid.style.display = 'none';
-        
         const btn = document.getElementById('btn-export');
         const originalText = btn.textContent;
-        btn.textContent = "生成中...";
-        btn.disabled = true;
-
+        btn.textContent = "生成中..."; btn.disabled = true;
+        layerUi.style.display = 'none'; layerPaperGrid.style.display = 'none';
         try {
             const currentW = parseFloat(mainSvg.getAttribute('width'));
             const currentH = parseFloat(mainSvg.getAttribute('height'));
-            
-            // クローン作成
             const svgClone = mainSvg.cloneNode(true);
-            
-            // フォント埋め込み
             const fontCssUrl = 'https://fonts.googleapis.com/css2?family=BIZ+UDMincho&family=Noto+Sans+JP:wght@400;700;900&family=Noto+Serif+JP:wght@400;700;900&family=Yuji+Syuku&display=block';
             const embeddedCss = await getEmbeddableFontCss(fontCssUrl);
-            
             const styleEl = document.createElementNS(SVG_NS, 'style');
-            const existingStyle = document.getElementById('svg-style').textContent;
-            styleEl.textContent = embeddedCss + '\n' + existingStyle;
-            
+            styleEl.textContent = embeddedCss + '\n' + document.getElementById('svg-style').textContent;
             let defs = svgClone.querySelector('defs');
-            if (!defs) {
-                defs = document.createElementNS(SVG_NS, 'defs');
-                svgClone.prepend(defs);
-            }
+            if(!defs) { defs = document.createElementNS(SVG_NS, 'defs'); svgClone.prepend(defs); }
             defs.appendChild(styleEl);
-
             const svgData = new XMLSerializer().serializeToString(svgClone);
             const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
             const url = URL.createObjectURL(blob);
-            
             const img = new Image();
             img.onload = () => {
                 const canvas = document.createElement('canvas');
                 const scale = 4;
-                canvas.width = currentW * scale; 
-                canvas.height = currentH * scale;
+                canvas.width = currentW * scale; canvas.height = currentH * scale;
                 const ctx = canvas.getContext('2d');
                 ctx.scale(scale, scale);
                 ctx.drawImage(img, 0, 0);
-                
                 const a = document.createElement('a');
                 a.href = canvas.toDataURL('image/png');
-                a.download = 'newspaper_export.png';
+                a.download = 'newspaper.png';
                 a.click();
                 URL.revokeObjectURL(url);
-                
-                // 元に戻す
-                layerUi.style.display = 'block';
-                layerPaperGrid.style.display = 'block';
-                btn.textContent = originalText;
-                btn.disabled = false;
+                layerUi.style.display = 'block'; layerPaperGrid.style.display = 'block';
+                btn.textContent = originalText; btn.disabled = false;
             };
             img.src = url;
         } catch(e) {
             console.error(e);
-            alert("エクスポート中にエラーが発生しました");
-            layerUi.style.display = 'block';
-            layerPaperGrid.style.display = 'block';
-            btn.textContent = originalText;
-            btn.disabled = false;
+            layerUi.style.display = 'block'; layerPaperGrid.style.display = 'block';
+            btn.textContent = originalText; btn.disabled = false;
         }
     }
+    function setCanvasPreset(w, h) { document.getElementById('inp-canvas-w').value = w; document.getElementById('inp-canvas-h').value = h; updateCanvasSize(); fitView(); }
+    function swapCanvasSize() { const w = document.getElementById('inp-canvas-w'); const h = document.getElementById('inp-canvas-h'); [w.value, h.value] = [h.value, w.value]; updateCanvasSize(); }
 
-    function updateSelectedText() {
-        if (!STATE.selectedId) return;
-        const data = STATE.elements.find(el => el.id === STATE.selectedId);
-        data.text = document.getElementById('inp-text').value;
-        renderElement(data);
-    }
-
-    function updateSelectedStyle() {
-        if (!STATE.selectedId) return;
-        const data = STATE.elements.find(el => el.id === STATE.selectedId);
-        data.fontFamily = document.getElementById('inp-fontfamily').value;
-        data.showGrid = document.getElementById('inp-showgrid').checked;
-        renderElement(data);
-        renderUi(); 
-    }
-
-    function fitView() {
-        const vw = viewport.clientWidth;
-        const vh = viewport.clientHeight;
-        const w_px = STATE.canvas.width * PX_PER_MM;
-        const h_px = STATE.canvas.height * PX_PER_MM;
-        const margin = 40;
-        const scale = Math.min((vw - margin*2) / w_px, (vh - margin*2) / h_px);
-        STATE.view.scale = Math.max(0.1, Math.min(scale, 5.0));
-        STATE.view.x = (vw - w_px * STATE.view.scale) / 2;
-        STATE.view.y = (vh - h_px * STATE.view.scale) / 2;
-        updateTransform();
-    }
-
-    window.addEventListener('load', () => {
-        updateCanvasSize();
-        updateGridSettings(); 
-        updateColors(); 
-        fitView();
-    });
+    window.addEventListener('load', () => { updateCanvasSize(); updateGridSettings(); updateColors(); fitView(); });
 </script>
 </body>
 </html>
+
+
