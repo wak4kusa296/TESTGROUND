@@ -2618,6 +2618,21 @@
         }
     }
 
+    function getVisualBounds(data) {
+        if (data.type !== 'text') {
+            return { x: data.x, y: data.y, width: data.width, height: data.height };
+        }
+        const charScale = (data.charScale !== undefined && data.charScale !== null) ? data.charScale : 85;
+        const scaleVal = Math.max(0.01, charScale / 100);
+        const isVertical = data.writingMode && data.writingMode.includes('vertical');
+        return {
+            x: data.x,
+            y: data.y,
+            width: isVertical ? data.width : data.width * scaleVal,
+            height: isVertical ? data.height * scaleVal : data.height
+        };
+    }
+
     // --- UI/Updates ---
     function renderUi() {
         if (STATE.interactionType === 'resize' || STATE.interactionType === 'drag') {
@@ -2812,10 +2827,11 @@
             }
         }
 
+        const visual = getVisualBounds(data);
         const rect = document.createElementNS(SVG_NS, 'rect');
         rect.id = 'ui-selection-rect';
-        rect.setAttribute('x', data.x - 2); rect.setAttribute('y', data.y - 2);
-        rect.setAttribute('width', data.width + 4); rect.setAttribute('height', data.height + 4);
+        rect.setAttribute('x', visual.x - 2); rect.setAttribute('y', visual.y - 2);
+        rect.setAttribute('width', visual.width + 4); rect.setAttribute('height', visual.height + 4);
 
         let selClass = 'selection-rect';
         if (data.type === 'heading') selClass += ' heading-select';
@@ -2825,31 +2841,32 @@
 
         const isHeading = (data.type === 'heading');
         const isMasthead = (data.type === 'masthead');
-        createHandle(data.x, data.y, 'nw', isHeading, isMasthead);
-        createHandle(data.x + data.width, data.y, 'ne', isHeading, isMasthead);
-        createHandle(data.x, data.y + data.height, 'sw', isHeading, isMasthead);
-        createHandle(data.x + data.width, data.y + data.height, 'se', isHeading, isMasthead);
+        createHandle(visual.x, visual.y, 'nw', isHeading, isMasthead);
+        createHandle(visual.x + visual.width, visual.y, 'ne', isHeading, isMasthead);
+        createHandle(visual.x, visual.y + visual.height, 'sw', isHeading, isMasthead);
+        createHandle(visual.x + visual.width, visual.y + visual.height, 'se', isHeading, isMasthead);
         
         // Link Handle (Text Only)
         if (data.type === 'text') {
-            createLinkHandle(data);
+            createLinkHandle(data, visual);
         }
     }
     
-    function createLinkHandle(data) {
+    function createLinkHandle(data, visualBounds) {
         const size = 10;
-        const x = data.x + data.width / 2 - size / 2;
-        const y = data.y + data.height; // Bottom center
+        const bounds = visualBounds || getVisualBounds(data);
+        const centerX = bounds.x + bounds.width / 2 - size / 2;
+        const y = bounds.y + bounds.height; // Bottom center
         
         const g = document.createElementNS(SVG_NS, 'g');
         
         const rect = document.createElementNS(SVG_NS, 'rect');
-        rect.setAttribute('x', x); rect.setAttribute('y', y);
+        rect.setAttribute('x', centerX); rect.setAttribute('y', y);
         rect.setAttribute('width', size); rect.setAttribute('height', size);
         rect.setAttribute('class', 'link-handle-rect' + (data.next ? ' connected' : ''));
         
         const hit = document.createElementNS(SVG_NS, 'rect');
-        hit.setAttribute('x', x - 5); hit.setAttribute('y', y - 5);
+        hit.setAttribute('x', centerX - 5); hit.setAttribute('y', y - 5);
         hit.setAttribute('width', size + 10); hit.setAttribute('height', size + 10);
         hit.setAttribute('class', 'link-handle-hit');
         
@@ -2891,25 +2908,26 @@
     }
 
     function updateUiPositions(data) {
+        const visual = getVisualBounds(data);
         const rect = document.getElementById('ui-selection-rect');
         if(rect) {
-            rect.setAttribute('x', data.x - 2); rect.setAttribute('y', data.y - 2);
-            rect.setAttribute('width', data.width + 4); rect.setAttribute('height', data.height + 4);
+            rect.setAttribute('x', visual.x - 2); rect.setAttribute('y', visual.y - 2);
+            rect.setAttribute('width', visual.width + 4); rect.setAttribute('height', visual.height + 4);
         }
         const setPos = (sel, x, y) => {
             const group = layerUi.querySelector(sel);
             if(group) group.querySelectorAll('circle').forEach(c => { c.setAttribute('cx', x); c.setAttribute('cy', y); });
         };
-        setPos('.cursor-nw', data.x, data.y); setPos('.cursor-ne', data.x + data.width, data.y);
-        setPos('.cursor-sw', data.x, data.y + data.height); setPos('.cursor-se', data.x + data.width, data.y + data.height);
+        setPos('.cursor-nw', visual.x, visual.y); setPos('.cursor-ne', visual.x + visual.width, visual.y);
+        setPos('.cursor-sw', visual.x, visual.y + visual.height); setPos('.cursor-se', visual.x + visual.width, visual.y + visual.height);
         
         // Update link handle pos if dragging
         const linkHandle = layerUi.querySelector('.link-handle-rect');
         const linkHit = layerUi.querySelector('.link-handle-hit');
         if (linkHandle && linkHit) {
             const size = 10;
-            const lx = data.x + data.width / 2 - size / 2;
-            const ly = data.y + data.height;
+            const lx = visual.x + visual.width / 2 - size / 2;
+            const ly = visual.y + visual.height;
             linkHandle.setAttribute('x', lx); linkHandle.setAttribute('y', ly);
             linkHit.setAttribute('x', lx - 5); linkHit.setAttribute('y', ly - 5);
         }
