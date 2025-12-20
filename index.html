@@ -3,8 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>SVG Newspaper Tool Core</title>
-<!-- Google Fonts -->
+<title>SVG Newspaper Tool (Fixed)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=BIZ+UDMincho&family=Noto+Sans+JP:wght@400;700;900&family=Noto+Serif+JP:wght@400;700;900&family=Yuji+Syuku&display=block" rel="stylesheet">
@@ -15,6 +14,9 @@
         --panel-bg: #ffffff;
         --border-col: #ddd;
         --primary: #2196f3;
+        --accent: #ff9800;
+        --masthead: #d32f2f; /* 題字用カラー */
+        --link-col: #9c27b0;
         --text: #333;
     }
     body {
@@ -51,9 +53,14 @@
         display: flex; justify-content: center; align-items: center;
         font-size: 20px;
         transition: 0.2s;
+        position: relative;
     }
     .tool-btn:hover { background: #eee; }
     .tool-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .tool-btn.active.btn-heading { background: var(--accent); border-color: var(--accent); }
+    .tool-btn.active.btn-masthead { background: var(--masthead); border-color: var(--masthead); }
+
+    .tool-label { font-size: 10px; position: absolute; bottom: 1px; line-height: 1; }
 
     /* メインエリア */
     .viewport {
@@ -67,8 +74,6 @@
         touch-action: none;
     }
     .viewport.mode-create { cursor: crosshair; }
-    .viewport.hand-mode { cursor: grab; }
-    .viewport.hand-mode:active { cursor: grabbing; }
 
     /* SVG用紙コンテナ */
     #canvas-container {
@@ -76,14 +81,12 @@
         position: absolute;
         top: 0; left: 0;
         box-shadow: 0 0 20px rgba(0,0,0,0.1);
-        will-change: transform;
     }
 
     /* SVG用紙 */
     #main-svg {
         background: transparent;
         display: block; 
-        transition: width 0.3s, height 0.3s;
         shape-rendering: geometricPrecision;
         text-rendering: geometricPrecision;
         overflow: visible;
@@ -115,90 +118,125 @@
     }
     .prop-textarea { resize: vertical; min-height: 100px; }
     
+    /* スライダー */
+    input[type=range] {
+        -webkit-appearance: none; background: transparent; margin: 0; vertical-align: middle; cursor: pointer;
+    }
+    input[type=range]:focus { outline: none; }
+    input[type=range]::-webkit-slider-thumb {
+        -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%;
+        background: var(--primary); cursor: pointer; margin-top: -6px;
+        border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    input[type=range]::-webkit-slider-runnable-track {
+        width: 100%; height: 4px; background: #e0e0e0; border-radius: 2px;
+    }
+    .heading-slider::-webkit-slider-thumb { background: var(--accent); }
+    .masthead-slider::-webkit-slider-thumb { background: var(--masthead); }
+
     .btn-primary {
-        width: 100%; padding: 8px;
-        background: var(--primary); color: white;
+        width: 100%; padding: 8px; background: var(--primary); color: white;
         border: none; border-radius: 4px; cursor: pointer;
     }
     .btn-primary:hover { opacity: 0.9; }
+    .btn-delete { background: #e53935; margin-top:20px; }
 
     .btn-secondary {
-        flex: 1; padding: 6px;
-        background: #f0f0f0; color: #333;
-        border: 1px solid var(--border-col);
-        border-radius: 4px; cursor: pointer;
-        font-size: 12px;
-        text-align: center;
+        flex: 1; padding: 6px; background: #f0f0f0; color: #333;
+        border: 1px solid var(--border-col); border-radius: 4px; cursor: pointer;
+        font-size: 12px; text-align: center;
     }
     .btn-secondary:hover { background: #e0e0e0; }
 
-    /* SVG内 UIスタイル */
+    /* UIスタイル */
     .selection-rect {
-        fill: none;
-        stroke: var(--primary);
-        stroke-width: 2px;
-        stroke-dasharray: 4 2;
-        pointer-events: none; 
-        vector-effect: non-scaling-stroke;
+        fill: none; stroke: var(--primary); stroke-width: 2px; stroke-dasharray: 4 2;
+        pointer-events: none; vector-effect: non-scaling-stroke;
     }
+    .selection-rect.heading-select { stroke: var(--accent); }
+    .selection-rect.masthead-select { stroke: var(--masthead); }
     
-    /* 生成中のプレビュー矩形 */
     .creation-preview-rect {
-        fill: rgba(33, 150, 243, 0.2);
-        stroke: var(--primary);
-        stroke-width: 1px;
-        stroke-dasharray: 4 2;
-        pointer-events: none;
-        vector-effect: non-scaling-stroke;
+        fill: rgba(33, 150, 243, 0.2); stroke: var(--primary); stroke-width: 1px; stroke-dasharray: 4 2;
+        pointer-events: none; vector-effect: non-scaling-stroke;
     }
 
-    /* リサイズハンドル */
-    .resize-handle {
-        fill: white;
-        stroke: var(--primary);
-        stroke-width: 2px;
-        cursor: pointer;
-        vector-effect: non-scaling-stroke;
-        pointer-events: all !important; /* 最重要 */
+    /* ハンドル */
+    .handle-group { cursor: pointer; }
+    .resize-handle-visual {
+        fill: white; stroke: var(--primary); stroke-width: 2px; vector-effect: non-scaling-stroke; pointer-events: none; 
     }
-    .resize-handle:hover, .resize-handle:active {
-        fill: var(--primary);
+    .resize-handle-hit {
+        fill: #ffffff; fill-opacity: 0; cursor: pointer; pointer-events: all;
     }
+    .handle-group:hover .resize-handle-visual { fill: var(--primary); }
+    .handle-group.heading-handle .resize-handle-visual { stroke: var(--accent); }
+    .handle-group.heading-handle:hover .resize-handle-visual { fill: var(--accent); }
+    .handle-group.masthead-handle .resize-handle-visual { stroke: var(--masthead); }
+    .handle-group.masthead-handle:hover .resize-handle-visual { fill: var(--masthead); }
+
+    /* リンクハンドル (四角) */
+    .link-handle-rect {
+        fill: #fff; stroke: var(--link-col); stroke-width: 2px; cursor: pointer; vector-effect: non-scaling-stroke;
+    }
+    .link-handle-rect.connected { fill: var(--link-col); }
+    .link-handle-hit { fill: transparent; cursor: pointer; pointer-events: all; }
+    
+    .link-line-preview {
+        stroke: var(--link-col); stroke-width: 2px; stroke-dasharray: 4 2; fill: none; pointer-events: none;
+    }
+
     .cursor-nw { cursor: nw-resize; }
     .cursor-ne { cursor: ne-resize; }
     .cursor-sw { cursor: sw-resize; }
     .cursor-se { cursor: se-resize; }
 
     .margin-guide {
-        fill: none;
-        stroke: #00bcd4;
-        stroke-width: 1px;
-        stroke-dasharray: 5 5;
-        pointer-events: none;
-        vector-effect: non-scaling-stroke;
+        fill: none; stroke: #00bcd4; stroke-width: 1px; stroke-dasharray: 5 5; pointer-events: none; vector-effect: non-scaling-stroke;
     }
     
+    /* ハンドツール時のカーソル */
+    .viewport.mode-select { cursor: grab; }
+    .viewport.mode-select:active { cursor: grabbing; }
+
     text { user-select: none; pointer-events: none; }
+    .grid-line, .grid-rect { stroke: #b3e5fc; stroke-width: 0.5px; fill: none; pointer-events: none; vector-effect: non-scaling-stroke; }
+    .hit-rect { fill: #ffffff; fill-opacity: 0; cursor: move; pointer-events: all; }
     
-    .grid-line { stroke: #b3e5fc; stroke-width: 0.5px; fill: none; pointer-events: none; vector-effect: non-scaling-stroke; }
-    .grid-rect { stroke: #b3e5fc; stroke-width: 0.5px; fill: none; pointer-events: none; vector-effect: non-scaling-stroke; }
-    .grid-dan-border { stroke: #81d4fa; stroke-width: 1px; fill: none; pointer-events: none; vector-effect: non-scaling-stroke; }
-    
-    /* ボックスのヒットエリア用 (透明だがイベントは受ける) */
-    .hit-rect {
-        fill: #ffffff;
-        fill-opacity: 0;
-        cursor: move;
-        pointer-events: all;
+    /* 色制御用クラス */
+    .ink-fill { fill: #333; }
+    .ink-stroke { stroke: #333; }
+    .paper-fill { fill: #fff; }
+    .paper-stroke { stroke: #fff; }
+
+    /* リンク接続候補（ドラッグ開始時に枠線だけ表示） */
+    .link-candidate .hit-rect {
+        stroke: var(--link-col);
+        stroke-width: 2px;
+        stroke-dasharray: 4 4;
+        fill: none; /* 塗りつぶしなし */
+    }
+
+    /* リンク接続対象（ホバー時・強調） */
+    .highlight-target .hit-rect {
+        stroke: var(--link-col);
+        stroke-width: 3px;
+        stroke-dasharray: 4 4;
+        fill: rgba(156, 39, 176, 0.2) !important;
+        fill-opacity: 1 !important;
     }
 </style>
 </head>
 <body>
 
 <div class="toolbar">
-    <button class="tool-btn active" id="btn-select" title="選択 (V)" onclick="setMode('select')">👆</button>
-    <button class="tool-btn" id="btn-text" title="記事 (T)" onclick="setMode('text')">T</button>
-    <button class="tool-btn" id="btn-rect" title="矩形 (R)" onclick="setMode('rect')">⬜</button>
+    <!-- アイコンを「手」に変更 -->
+    <button class="tool-btn active" id="btn-select" title="移動 (H)" onclick="setMode('select')">✋</button>
+    <button class="tool-btn" id="btn-text" title="記事 (T)" onclick="setMode('text')">T<span class="tool-label">記事</span></button>
+    <button class="tool-btn btn-heading" id="btn-heading" title="見出し (H)" onclick="setMode('heading')">H<span class="tool-label" style="font-weight:bold;">見出</span></button>
+    <button class="tool-btn btn-masthead" id="btn-masthead" title="題字 (M)" onclick="setMode('masthead')">題<span class="tool-label">題字</span></button>
+    <button class="tool-btn" id="btn-rect" title="塗りつぶし (R)" onclick="setMode('rect')">■<span class="tool-label">塗潰</span></button>
+    <button class="tool-btn" id="btn-image" title="画像 (I)" onclick="setMode('image')">🖼<span class="tool-label">画像</span></button>
     <div style="flex:1"></div>
     <button class="tool-btn" onclick="fitView()" title="全体表示">🔍</button>
 </div>
@@ -208,32 +246,36 @@
         <svg id="main-svg" width="297" height="420" viewBox="0 0 297 420" xmlns="http://www.w3.org/2000/svg" overflow="visible">
             <defs>
                 <style id="svg-style">
-                    .ink-fill { fill: #333333; }
-                    .ink-stroke { stroke: #333333; }
+                    .hit-rect { fill: #ffffff; fill-opacity: 0; pointer-events: all; }
+                    .ink-fill { fill: #333333; } .ink-stroke { stroke: #333333; }
+                    .paper-fill { fill: #ffffff; } .paper-stroke { stroke: #ffffff; }
+                    text { fill: #333333; }
                 </style>
             </defs>
-            <rect id="paper-bg" x="0" y="0" width="100%" height="100%" fill="#ffffff"></rect>
+            <rect id="paper-bg" class="paper-fill" x="0" y="0" width="100%" height="100%"></rect>
+
+            <!-- レイヤー順序: 段間罫線 < グリッド < コンテンツ < UI < 枠線 -->
+            <g id="layer-dan-lines"></g>
             <g id="layer-paper-grid"></g>
-            <g id="layer-grid"></g>
             <g id="layer-content"></g>
             <g id="layer-ui"></g>
+            <g id="layer-border"></g>
         </svg>
     </div>
 </div>
 
 <div class="properties">
-    <!-- 設定パネル -->
+    <!-- 設定パネル: 未選択 -->
     <div class="prop-group" id="prop-panel-none">
         <div class="prop-label">用紙サイズ (mm)</div>
         <div class="prop-row">
             <input type="number" id="inp-canvas-w" class="prop-input" value="297" onchange="updateCanvasSize()">
-            <span style="font-size:12px;">×</span>
+            <span>×</span>
             <input type="number" id="inp-canvas-h" class="prop-input" value="420" onchange="updateCanvasSize()">
         </div>
         <div class="prop-row">
             <button class="btn-secondary" onclick="setCanvasPreset(210, 297)">A4</button>
             <button class="btn-secondary" onclick="setCanvasPreset(297, 420)">A3</button>
-            <button class="btn-secondary" onclick="setCanvasPreset(257, 364)">B4</button>
             <button class="btn-secondary" onclick="swapCanvasSize()">縦横入替</button>
         </div>
 
@@ -245,20 +287,6 @@
         <div class="prop-row">
             <span style="font-size:11px; flex:1;">インクの色</span>
             <input type="color" id="inp-ink-color" value="#333333" onchange="updateColors()" style="height:24px;">
-        </div>
-
-        <div class="prop-label" style="margin-top:15px;">マージン (mm)</div>
-        <div class="prop-row">
-            <span style="font-size:11px; width:15px;">上</span>
-            <input type="number" id="inp-margin-t" class="prop-input" value="20" onchange="updateMargins()">
-            <span style="font-size:11px; width:15px;">下</span>
-            <input type="number" id="inp-margin-b" class="prop-input" value="20" onchange="updateMargins()">
-        </div>
-        <div class="prop-row">
-            <span style="font-size:11px; width:15px;">左</span>
-            <input type="number" id="inp-margin-l" class="prop-input" value="20" onchange="updateMargins()">
-            <span style="font-size:11px; width:15px;">右</span>
-            <input type="number" id="inp-margin-r" class="prop-input" value="20" onchange="updateMargins()">
         </div>
 
         <div class="prop-label" style="margin-top:15px; color:#2196f3;">紙面割付</div>
@@ -283,14 +311,34 @@
             <div id="grid-info" style="font-size:10px; color:#666; margin-top:5px;"></div>
         </div>
 
+        <div class="prop-label" style="margin-top:15px;">記事ボックス設定</div>
+        <div class="prop-row">
+            <label style="font-size:11px; display:flex; align-items:center; cursor:pointer;">
+                <input type="checkbox" id="inp-snap-article" checked onchange="updateSnapMode()" style="margin-right:5px;"> 記事配置モード (段スナップ)
+            </label>
+        </div>
+
         <div class="prop-label" style="margin-top:20px;">エクスポート</div>
         <button class="btn-primary" id="btn-export" onclick="exportCanvas()">画像として書き出し</button>
     </div>
 
+    <!-- 設定パネル: 記事 -->
     <div class="prop-group" id="prop-panel-text" style="display:none;">
         <div class="prop-label">記事ボックス編集</div>
         <textarea id="inp-text" class="prop-textarea" oninput="updateSelectedText()"></textarea>
-        
+
+        <div id="text-char-info" style="font-size:11px; color:#666; margin-top:5px; margin-bottom:10px;">
+            現在: <span id="char-current">0</span>文字 /
+            最大: <span id="char-capacity">0</span>文字 /
+            あふれ: <span id="char-overflow" style="color:#f44336;">0</span>文字
+        </div>
+
+        <div class="prop-row">
+            <label style="font-size:11px; display:flex; align-items:center; cursor:pointer; width:100%;">
+                <input type="checkbox" id="inp-snap-article-txt" checked onchange="updateSnapMode()" style="margin-right:5px;"> 記事配置モード (段スナップ)
+            </label>
+        </div>
+
         <div class="prop-label">フォント設定</div>
         <select id="inp-fontfamily" class="prop-select" onchange="updateSelectedStyle()">
             <option value='"BIZ UDMincho", serif'>BIZ UD明朝 (標準)</option>
@@ -298,30 +346,153 @@
             <option value='"Noto Sans JP", sans-serif'>Noto Sans JP</option>
             <option value='"Yuji Syuku", serif'>佑字 宿 (筆文字)</option>
         </select>
+        
+        <div id="text-link-info" style="font-size:11px; color:#9c27b0; margin-bottom:10px; display:none;">
+            ※このボックスはリンク接続されています。<br>文字は前のボックスから流し込まれます。
+        </div>
 
+        <button class="btn-primary btn-delete" onclick="deleteSelected()">削除</button>
+    </div>
+
+    <!-- 設定パネル: 見出し -->
+    <div class="prop-group" id="prop-panel-heading" style="display:none;">
+        <div class="prop-label" style="color:var(--accent);">見出し編集</div>
+        <input type="text" id="inp-heading-text" class="prop-input" oninput="updateHeadingProp('text')">
+        
+        <div class="prop-row" style="margin-top:10px;">
+            <label style="display:flex; align-items:center; font-size:12px; cursor:pointer; flex:1;">
+                <input type="checkbox" id="inp-heading-inverted" onchange="updateHeadingProp('inverted')" style="margin-right:5px;"> 白黒反転 (座布団)
+            </label>
+        </div>
+
+        <div class="prop-label" style="margin-top:10px;">フォント設定</div>
+        <select id="inp-heading-font" class="prop-select" onchange="updateHeadingProp('fontFamily')">
+            <option value='"Noto Sans JP", sans-serif'>Noto Sans JP (ゴシック)</option>
+            <option value='"Noto Serif JP", serif'>Noto Serif JP (明朝)</option>
+            <option value='"BIZ UDMincho", serif'>BIZ UD明朝</option>
+            <option value='"Yuji Syuku", serif'>佑字 宿</option>
+        </select>
+        <div class="prop-label">余白設定 (mm)</div>
         <div class="prop-row">
-            <div style="flex:1; opacity:0.5; pointer-events:none;">
-                <span class="prop-label">サイズ(px) [自動]</span>
-                <input type="number" id="inp-fontsize" class="prop-input" readonly>
-            </div>
-            <div style="flex:1; opacity:0.5; pointer-events:none;">
-                <span class="prop-label">行間(em) [自動]</span>
-                <input type="number" id="inp-lineheight" class="prop-input" readonly>
-            </div>
+            <span style="font-size:11px; flex:0.8;">左右</span>
+            <input type="range" id="inp-heading-ph-slider" class="heading-slider" min="0" max="50" step="0.5" value="5" oninput="updateHeadingProp('padding', 'h', this.value)" style="flex:2;">
+            <input type="number" id="inp-heading-ph" class="prop-input" style="flex:0.8; margin-bottom:0;" value="5" onchange="updateHeadingProp('padding', 'h', this.value)">
+        </div>
+        <div class="prop-row">
+            <span style="font-size:11px; flex:0.8;">天地</span>
+            <input type="range" id="inp-heading-pv-slider" class="heading-slider" min="0" max="50" step="0.5" value="5" oninput="updateHeadingProp('padding', 'v', this.value)" style="flex:2;">
+            <input type="number" id="inp-heading-pv" class="prop-input" style="flex:0.8; margin-bottom:0;" value="5" onchange="updateHeadingProp('padding', 'v', this.value)">
+        </div>
+        <div style="font-size:11px; color:#666; margin-top:10px;">
+            ※左右に行間分の紙色シャドウがつきます。<br>
+            ※文字は常時最大太さ(900)で表示されます。
+        </div>
+        <button class="btn-primary btn-delete" onclick="deleteSelected()">削除</button>
+    </div>
+
+    <!-- 設定パネル: 題字 -->
+    <div class="prop-group" id="prop-panel-masthead" style="display:none;">
+        <div class="prop-label" style="color:var(--masthead);">題字編集</div>
+        <input type="text" id="inp-masthead-text" class="prop-input" oninput="updateMastheadProp('text')">
+        
+        <div class="prop-row" style="margin-top:10px;">
+            <label style="display:flex; align-items:center; font-size:12px; cursor:pointer; flex:1;">
+                <input type="checkbox" id="inp-masthead-inverted" onchange="updateMastheadProp('inverted')" style="margin-right:5px;"> 文字色反転 (白抜き)
+            </label>
+        </div>
+
+        <div class="prop-label" style="margin-top:10px;">デザイン設定 (mm)</div>
+        <div class="prop-row">
+            <span style="font-size:11px; flex:1;">外枠の太さ</span>
+            <input type="range" id="inp-masthead-bo-slider" class="masthead-slider" min="0.5" max="5.0" step="0.1" value="1.0" oninput="updateMastheadProp('borderWidthOuter', this.value)" style="flex:1.5;">
+            <input type="number" id="inp-masthead-bo" class="prop-input" style="flex:0.8;" value="1.0" onchange="updateMastheadProp('borderWidthOuter', this.value)">
+        </div>
+        <div class="prop-row">
+            <span style="font-size:11px; flex:1;">内枠の太さ</span>
+            <input type="range" id="inp-masthead-bi-slider" class="masthead-slider" min="0.1" max="3.0" step="0.1" value="0.3" oninput="updateMastheadProp('borderWidthInner', this.value)" style="flex:1.5;">
+            <input type="number" id="inp-masthead-bi" class="prop-input" style="flex:0.8;" value="0.3" onchange="updateMastheadProp('borderWidthInner', this.value)">
+        </div>
+        <div class="prop-row">
+            <span style="font-size:11px; flex:1;">地紋線の太さ</span>
+            <input type="range" id="inp-masthead-pl-slider" class="masthead-slider" min="0.1" max="1.0" step="0.1" value="0.4" oninput="updateMastheadProp('patternLineHeight', this.value)" style="flex:1.5;">
+            <input type="number" id="inp-masthead-pl" class="prop-input" style="flex:0.8;" value="0.4" onchange="updateMastheadProp('patternLineHeight', this.value)">
         </div>
         
-        <div class="prop-label">書字方向</div>
-        <select id="inp-writingmode" class="prop-select" onchange="updateSelectedStyle()">
-            <option value="vertical-rl">縦書き</option>
-            <option value="horizontal-tb">横書き</option>
+        <div class="prop-row">
+            <span style="font-size:11px; flex:1;">文字縁取り</span>
+            <input type="range" id="inp-masthead-ts-slider" class="masthead-slider" min="0" max="20" step="0.5" value="4" oninput="updateMastheadProp('textStrokeWidth', this.value)" style="flex:1.5;">
+            <input type="number" id="inp-masthead-ts" class="prop-input" style="flex:0.8;" value="4" onchange="updateMastheadProp('textStrokeWidth', this.value)">
+        </div>
+
+        <div class="prop-label">余白設定 (mm)</div>
+        <div class="prop-row">
+            <span style="font-size:11px; flex:0.8;">左右</span>
+            <input type="range" id="inp-masthead-ph-slider" class="masthead-slider" min="0" max="50" step="0.5" value="5" oninput="updateMastheadProp('paddingH', this.value)" style="flex:2;">
+            <input type="number" id="inp-masthead-ph" class="prop-input" style="flex:0.8; margin-bottom:0;" value="5" onchange="updateMastheadProp('paddingH', this.value)">
+        </div>
+        <div class="prop-row">
+            <span style="font-size:11px; flex:0.8;">天地</span>
+            <input type="range" id="inp-masthead-pv-slider" class="masthead-slider" min="0" max="50" step="0.5" value="5" oninput="updateMastheadProp('paddingV', this.value)" style="flex:2;">
+            <input type="number" id="inp-masthead-pv" class="prop-input" style="flex:0.8; margin-bottom:0;" value="5" onchange="updateMastheadProp('paddingV', this.value)">
+        </div>
+
+        <div class="prop-label">フォント設定</div>
+        <select id="inp-masthead-font" class="prop-select" onchange="updateMastheadProp('fontFamily')">
+            <option value='"BIZ UDMincho", serif'>BIZ UD明朝 (標準)</option>
+            <option value='"Noto Serif JP", serif'>Noto Serif JP (明朝)</option>
+            <option value='"Yuji Syuku", serif'>佑字 宿 (筆文字)</option>
+            <option value='"Noto Sans JP", sans-serif'>Noto Sans JP (ゴシック)</option>
         </select>
 
-        <div class="prop-label" style="margin-top:10px;">表示オプション</div>
-        <label style="display:flex; align-items:center; font-size:14px; cursor:pointer;">
-            <input type="checkbox" id="inp-showgrid" onchange="updateSelectedStyle()" style="margin-right:5px;"> 個別マス目
-        </label>
+        <button class="btn-primary btn-delete" onclick="deleteSelected()">削除</button>
+    </div>
+
+    <!-- 設定パネル: 塗りつぶし -->
+    <div class="prop-group" id="prop-panel-rect" style="display:none;">
+        <div class="prop-label">塗りつぶし設定</div>
+        <div class="prop-row">
+            <label style="display:flex; align-items:center; font-size:12px; cursor:pointer; flex:1;">
+                <input type="checkbox" id="inp-rect-ink" onchange="updateRectProp()"> インク色で塗りつぶす
+            </label>
+        </div>
+        <div style="font-size:11px; color:#666; margin-bottom:10px;">
+            ※OFFの場合は紙色で塗りつぶされます。
+        </div>
         
-        <button class="btn-primary" style="background:#e53935; margin-top:20px;" onclick="deleteSelected()">削除</button>
+        <div class="prop-label">枠線設定</div>
+        <select id="inp-rect-border-style" class="prop-select" onchange="updateRectProp()">
+            <option value="none">なし</option>
+            <option value="solid">実線</option>
+            <option value="dotted">点線</option>
+            <option value="double">二重線</option>
+        </select>
+        
+        <div class="prop-row">
+            <span style="font-size:11px; flex:0.8;">太さ(mm)</span>
+            <input type="range" id="inp-rect-border-w-slider" min="0.1" max="3.0" step="0.1" value="0.5" oninput="updateRectProp('width', this.value)" style="flex:2;">
+            <input type="number" id="inp-rect-border-w" class="prop-input" style="flex:0.8; margin-bottom:0;" value="0.5" onchange="updateRectProp('width', this.value)">
+        </div>
+        <div style="font-size:11px; color:#666; margin-top:5px;">
+            ※インク塗りつぶし時は、枠線が白抜きになり1mm内側に配置されます。
+        </div>
+
+        <button class="btn-primary btn-delete" onclick="deleteSelected()">削除</button>
+    </div>
+
+    <div class="prop-group" id="prop-panel-image" style="display:none;">
+        <div class="prop-label">画像設定</div>
+        <div class="prop-row" style="flex-direction: column; gap: 8px;">
+            <input type="file" id="inp-image-file" accept="image/*" onchange="loadImageFile(this)" style="font-size: 11px;">
+            <div id="image-info" style="font-size:11px; color:#666;"></div>
+        </div>
+
+        <div class="prop-label" style="margin-top: 15px;">トリミング</div>
+        <button class="btn-primary" id="btn-crop-mode" onclick="toggleCropMode()" style="margin-bottom: 10px;">トリミング調整</button>
+        <div style="font-size:11px; color:#666; margin-bottom:10px;">
+            ※ボタンを押すと画像上で直接ドラッグしてトリミングできます
+        </div>
+
+        <button class="btn-primary btn-delete" onclick="deleteSelected()">削除</button>
     </div>
 </div>
 
@@ -331,21 +502,17 @@
 
     const STATE = {
         mode: 'select',
+        articleSnapMode: true,
         canvas: { width: 297, height: 420, margin: { top: 20, bottom: 20, left: 20, right: 20 }, colors: { paper: '#ffffff', ink: '#333333' } },
         grid: { show: true, dan: 6, charsPerDan: 11, totalLines: 25, computed: { charSizeW: 0, charSizeH: 0, lineGap: 0, danHeight: 0, danPitch: 0, pitchX: 0 } },
         view: { x: 0, y: 0, scale: 1.0 },
-        activePointerId: null,
-        interactionType: null, // 'pan', 'drag', 'resize', 'create'
-        selectedId: null,
-        resizeDir: null,
-        pointerStart: { x: 0, y: 0 },
-        elemStart: { x: 0, y: 0, w: 0, h: 0 },
-        viewStart: { x: 0, y: 0, scale: 1 },
-        touchStartDist: 0,
-        touchStartCenter: { x: 0, y: 0 },
-        pinchStartCanvas: { x: 0, y: 0 },
-        resizeAnchor: { x: 0, y: 0 },
-        elements: [] 
+        activePointerId: null, interactionType: null, selectedId: null, resizeDir: null,
+        pointerStart: { x: 0, y: 0 }, elemStart: { x: 0, y: 0, w: 0, h: 0 }, viewStart: { x: 0, y: 0, scale: 1 },
+        touchStartDist: 0, pinchStartCanvas: { x: 0, y: 0 }, resizeAnchor: { x: 0, y: 0 },
+        elements: [],
+        linking: null, // { sourceId, lineEl }
+        cropMode: false, // トリミングモード
+        cropEdge: null // ドラッグ中のトリミング辺
     };
 
     const SVG_NS = "http://www.w3.org/2000/svg";
@@ -355,10 +522,9 @@
     const layerPaperGrid = document.getElementById('layer-paper-grid');
     const layerContent = document.getElementById('layer-content');
     const layerUi = document.getElementById('layer-ui');
-    const paperBg = document.getElementById('paper-bg');
     const svgStyle = document.getElementById('svg-style');
 
-    // --- Events ---
+    // Init Events
     viewport.addEventListener('pointerdown', onPointerDown);
     viewport.addEventListener('pointermove', onPointerMove);
     viewport.addEventListener('pointerup', onPointerUp);
@@ -368,35 +534,61 @@
     viewport.addEventListener('touchend', onTouchEnd);
     viewport.addEventListener('wheel', onWheel, { passive: false });
 
-    document.getElementById('btn-select').onclick = () => setMode('select');
-    document.getElementById('btn-text').onclick = () => setMode('text');
-    document.getElementById('btn-rect').onclick = () => setMode('rect');
-    document.getElementById('btn-export').onclick = exportCanvas;
-
     // --- Handlers ---
     function onPointerDown(e) {
         if (!e.isPrimary) return; 
         if (STATE.touchStartDist > 0) return; 
 
-        const target = e.target;
-        const pt = getSvgPoint(e.clientX, e.clientY);
-        
         STATE.activePointerId = e.pointerId;
         STATE.pointerStart = { x: e.clientX, y: e.clientY };
         STATE.viewStart = { ...STATE.view };
 
-        // 1. Resize Handle
-        if (target.classList.contains('resize-handle')) {
+        const target = e.target;
+        const pt = getSvgPoint(e.clientX, e.clientY);
+
+        // 0. Link Handle Interaction
+        if (target.classList.contains('link-handle-hit')) {
             e.preventDefault();
-            target.setPointerCapture(e.pointerId);
+            const sourceId = STATE.selectedId;
+            if (!sourceId) return;
+            const data = STATE.elements.find(el => el.id === sourceId);
+
+            if (data.next) {
+                disconnectBlock(sourceId);
+                return;
+            }
+
+            STATE.interactionType = 'linking';
+            const line = document.createElementNS(SVG_NS, 'line');
+            line.setAttribute('x1', data.x + data.width / 2);
+            line.setAttribute('y1', data.y + data.height);
+            line.setAttribute('x2', pt.x);
+            line.setAttribute('y2', pt.y);
+            line.setAttribute('class', 'link-line-preview');
+            layerUi.appendChild(line);
+            STATE.linking = { sourceId: sourceId, lineEl: line };
+
+            showLinkCandidates(sourceId);
+            viewport.setPointerCapture(e.pointerId);
+            return;
+        }
+
+        // 1. Resize Handle
+        if (target.classList.contains('resize-handle-hit') || target.parentNode.classList.contains('handle-group')) {
+            e.preventDefault();
+            const group = target.classList.contains('handle-group') ? target : target.parentNode;
+            group.setPointerCapture(e.pointerId);
             STATE.interactionType = 'resize';
-            const classes = target.getAttribute('class');
+
+            const classes = group.getAttribute('class');
             if(classes.includes('cursor-nw')) STATE.resizeDir = 'nw';
             if(classes.includes('cursor-ne')) STATE.resizeDir = 'ne';
             if(classes.includes('cursor-sw')) STATE.resizeDir = 'sw';
             if(classes.includes('cursor-se')) STATE.resizeDir = 'se';
+
             const data = STATE.elements.find(el => el.id === STATE.selectedId);
             STATE.elemStart = { x: data.x, y: data.y, w: data.width, h: data.height };
+
             if (STATE.resizeDir === 'nw') STATE.resizeAnchor = { x: data.x + data.width, y: data.y + data.height };
             if (STATE.resizeDir === 'ne') STATE.resizeAnchor = { x: data.x, y: data.y + data.height };
             if (STATE.resizeDir === 'sw') STATE.resizeAnchor = { x: data.x + data.width, y: data.y };
@@ -404,45 +596,87 @@
             return;
         }
 
-        // 2. Element Hit (Drag)
-        let hitElementId = null;
-        if (target.classList.contains('hit-rect')) {
-            hitElementId = target.parentNode.id;
+        // 1.5 Image Scale Handle Hit
+        if (target.classList.contains('image-scale-handle')) {
+            e.preventDefault();
+            target.setPointerCapture(e.pointerId);
+            STATE.interactionType = 'image-scale';
+            STATE.scaleCorner = target.getAttribute('data-scale-corner');
+            const data = STATE.elements.find(el => el.id === STATE.selectedId);
+            STATE.elemStart = {
+                scale: data.imageScale || 1.0,
+                offsetX: data.imageOffsetX || 0,
+                offsetY: data.imageOffsetY || 0
+            };
+            return;
         }
 
-        if (STATE.mode === 'select') {
-            if (hitElementId) {
-                e.preventDefault();
-                target.setPointerCapture(e.pointerId);
-                STATE.selectedId = hitElementId;
-                STATE.interactionType = 'drag';
-                const data = STATE.elements.find(el => el.id === hitElementId);
-                STATE.elemStart = { x: data.x, y: data.y };
-                renderUi(); 
-            } else {
-                STATE.interactionType = 'pan';
-                STATE.selectedId = null; 
-                renderUi();
-                viewport.setPointerCapture(e.pointerId); 
-            }
-        } else {
-            // 3. Create
+        // 1.6 Image Drag Area Hit
+        if (target.classList.contains('image-drag-area')) {
             e.preventDefault();
-            viewport.setPointerCapture(e.pointerId);
-            STATE.interactionType = 'create';
-            STATE.elemStart = { x: pt.x, y: pt.y };
-            if(STATE.mode === 'text' && STATE.grid.computed.charSizeW > 0) {
-                STATE.elemStart.x = snapX(pt.x, false); 
-                STATE.elemStart.y = snapY(pt.y, true); 
+            target.setPointerCapture(e.pointerId);
+            STATE.interactionType = 'image-drag';
+            const data = STATE.elements.find(el => el.id === STATE.selectedId);
+            STATE.elemStart = {
+                offsetX: data.imageOffsetX || 0,
+                offsetY: data.imageOffsetY || 0
+            };
+            return;
+        }
+
+        // 2. Element Hit Logic
+        let hitElementId = null;
+        if (target.classList.contains('hit-rect')) {
+            // hit-rectの親要素のIDを取得。親がIDを持たない場合は、さらに親を探す
+            let parent = target.parentNode;
+            while (parent && !parent.id && parent !== layerContent) {
+                parent = parent.parentNode;
             }
-            const rect = document.createElementNS(SVG_NS, 'rect');
-            rect.id = 'creation-preview';
-            rect.setAttribute('x', STATE.elemStart.x);
-            rect.setAttribute('y', STATE.elemStart.y);
-            rect.setAttribute('width', 0);
-            rect.setAttribute('height', 0);
-            rect.setAttribute('class', 'creation-preview-rect');
-            layerUi.appendChild(rect);
+            hitElementId = parent ? parent.id : null;
+        }
+
+        if (hitElementId) {
+            e.preventDefault();
+            target.setPointerCapture(e.pointerId);
+            STATE.selectedId = hitElementId;
+
+            // クロップモード中は画像を移動
+            const data = STATE.elements.find(el => el.id === hitElementId);
+            if (STATE.cropMode && data && data.type === 'image') {
+                STATE.interactionType = 'image-drag';
+                STATE.elemStart = {
+                    offsetX: data.imageOffsetX || 0,
+                    offsetY: data.imageOffsetY || 0
+                };
+                renderUi();
+                return;
+            }
+
+            STATE.interactionType = 'drag';
+            STATE.elemStart = { x: data.x, y: data.y };
+            renderUi();
+        } else {
+            // 3. Create or Pan (select mode)
+            if (STATE.mode === 'select') {
+                // Select mode: pan if no element hit
+                e.preventDefault();
+                if (STATE.selectedId) {
+                    STATE.selectedId = null;
+                    renderUi();
+                }
+                STATE.interactionType = 'pan';
+                viewport.setPointerCapture(e.pointerId);
+            } else {
+                // Other modes: create new element
+                e.preventDefault();
+                if (STATE.selectedId) {
+                    STATE.selectedId = null;
+                    renderUi();
+                }
+                viewport.setPointerCapture(e.pointerId);
+                STATE.interactionType = 'create';
+                STATE.elemStart = { x: pt.x, y: pt.y };
+            }
         }
     }
 
@@ -456,6 +690,25 @@
             STATE.view.x = STATE.viewStart.x + dx;
             STATE.view.y = STATE.viewStart.y + dy;
             updateTransform();
+
+        } else if (STATE.interactionType === 'linking') {
+            if (STATE.linking && STATE.linking.lineEl) {
+                STATE.linking.lineEl.setAttribute('x2', pt.x);
+                STATE.linking.lineEl.setAttribute('y2', pt.y);
+
+                let targetId = null;
+                for (const el of STATE.elements) {
+                    if (el.id === STATE.linking.sourceId) continue;
+                    if (el.type !== 'text') continue;
+                    if (el.next || el.prev) continue;
+
+                    if (pt.x >= el.x && pt.x <= el.x + el.width && pt.y >= el.y && pt.y <= el.y + el.height) {
+                        targetId = el.id;
+                        break;
+                    }
+                }
+                updateLinkHighlight(targetId);
+            }
         } else if (STATE.interactionType === 'drag') {
             const dx = (e.clientX - STATE.pointerStart.x) / STATE.view.scale;
             const dy = (e.clientY - STATE.pointerStart.y) / STATE.view.scale;
@@ -463,87 +716,821 @@
             if (data) {
                 let newX = STATE.elemStart.x + dx;
                 let newY = STATE.elemStart.y + dy;
-                if (data.type === 'text' && STATE.grid.computed.charSizeW > 0) {
-                     newX = snapX(newX + data.width, false) - data.width;
-                     newY = snapY(newY, true);
+                
+                if ((data.type === 'text' || data.type === 'heading' || data.type === 'rect' || data.type === 'masthead' || data.type === 'image') && STATE.grid.computed.charSizeW > 0) {
+                      newX = getClosestColumnLeftEdge(newX);
+                      const useSnapMode = data.snapMode !== undefined ? data.snapMode : STATE.articleSnapMode;
+                      if ((data.type === 'text' || data.type === 'rect') && useSnapMode) {
+                          // 移動時もGapに入らないように厳格スナップ
+                          newY = snapY_StrictGap(newY);
+                      } else {
+                          // 画像ボックスはマス目スナップ
+                          newY = snapY(newY, true);
+                      }
                 }
+                
                 data.x = newX; data.y = newY;
-                updateElementTransform(data);
+                if(data.type === 'text') {
+                    renderElement(data); 
+                } else {
+                    updateElementTransform(data);
+                }
                 updateUiPositions(data);
             }
+
         } else if (STATE.interactionType === 'resize') {
             const data = STATE.elements.find(el => el.id === STATE.selectedId);
             if(data) {
                 const anchor = STATE.resizeAnchor;
-                let targetX = pt.x;
-                let targetY = pt.y;
-                if (data.type === 'text' && STATE.grid.computed.charSizeW > 0) {
-                    if(STATE.resizeDir.includes('w')) targetX = snapX(targetX, true);
-                    if(STATE.resizeDir.includes('e')) targetX = snapX(targetX, false);
-                    if(STATE.resizeDir.includes('n')) targetY = snapY(targetY, true);
-                    if(STATE.resizeDir.includes('s')) targetY = snapY(targetY, false);
+                let targetX = pt.x; let targetY = pt.y;
+                let effAnchorX = anchor.x;
+                let effAnchorY = anchor.y;
+                
+                const cGrid = STATE.grid.computed;
+                
+                if ((data.type === 'text' || data.type === 'heading' || data.type === 'rect' || data.type === 'masthead' || data.type === 'image') && cGrid.charSizeW > 0) {
+
+                    if (STATE.resizeDir.includes('e')) {
+                        if (targetX >= anchor.x) {
+                            effAnchorX = anchor.x; targetX = getClosestColumnRightEdge(targetX);
+                        } else {
+                            effAnchorX = anchor.x - cGrid.lineGap; targetX = getClosestColumnLeftEdge(targetX);
+                        }
+                    } else if (STATE.resizeDir.includes('w')) {
+                        if (targetX <= anchor.x) {
+                            effAnchorX = anchor.x; targetX = getClosestColumnLeftEdge(targetX);
+                        } else {
+                            effAnchorX = anchor.x + cGrid.lineGap; targetX = getClosestColumnRightEdge(targetX);
+                        }
+                    } else {
+                        targetX = getClosestColumnLeftEdge(data.x);
+                    }
+
+                    const gapY = cGrid.danPitch - cGrid.danHeight;
+                    const useSnapMode = data.snapMode !== undefined ? data.snapMode : STATE.articleSnapMode;
+                    if(STATE.resizeDir.includes('n')) {
+                        if (targetY <= anchor.y) {
+                            effAnchorY = anchor.y;
+                            // リサイズ(Top)時: 記事・塗りつぶしはGap回避、画像はマス目スナップ
+                            targetY = ((data.type === 'text' || data.type === 'rect') && useSnapMode) ? snapY_StrictGap(targetY) : snapY(targetY, true);
+                        } else {
+                            effAnchorY = anchor.y + gapY;
+                            targetY = ((data.type === 'text' || data.type === 'rect') && useSnapMode) ? snapY_StrictGap(targetY) : snapY(targetY, false);
+                        }
+                    } else if(STATE.resizeDir.includes('s')) {
+                        if (targetY >= anchor.y) {
+                            effAnchorY = anchor.y;
+                            // リサイズ(Bottom)時: 記事・塗りつぶしは段の下端、画像はマス目スナップ
+                            targetY = ((data.type === 'text' || data.type === 'rect') && useSnapMode) ? snapY_StrictGap_Bottom(targetY) : snapY(targetY, false);
+                        } else {
+                            effAnchorY = anchor.y - gapY;
+                            targetY = ((data.type === 'text' || data.type === 'rect') && useSnapMode) ? snapY_StrictGap_Bottom(targetY) : snapY(targetY, true);
+                        }
+                    }
                 }
-                let newW = Math.abs(targetX - anchor.x);
-                let newH = Math.abs(targetY - anchor.y);
-                let newX = Math.min(targetX, anchor.x);
-                let newY = Math.min(targetY, anchor.y);
-                if(newW < 10) newW = 10; if(newH < 10) newH = 10;
+                
+                let newW = Math.abs(targetX - effAnchorX);
+                let newH = Math.abs(targetY - effAnchorY);
+                let newX = Math.min(targetX, effAnchorX);
+                let newY = Math.min(targetY, effAnchorY);
+                if(newW < 1) newW = 1; if(newH < 1) newH = 1;
+
                 data.x = newX; data.y = newY; data.width = newW; data.height = newH;
-                updateElementTransform(data);
-                updateUiPositions(data);
-            }
-        } else if (STATE.interactionType === 'create') {
-            const preview = document.getElementById('creation-preview');
-            if(preview) {
-                let currentX = pt.x;
-                let currentY = pt.y;
-                if(STATE.mode === 'text' && STATE.grid.computed.charSizeW > 0) {
-                    currentX = snapX(currentX, true); 
-                    currentY = snapY(currentY, false); 
+
+                if(data.type === 'text') {
+                    const head = findChainHead(data);
+                    updateTextChain(head);
+                } else if(data.type === 'image') {
+                    // 画像ボックスのリサイズ時、オフセットを調整して余白が見えないようにする
+                    if (data._imageAspect) {
+                        const boxAspect = data.width / data.height;
+                        const imgAspect = data._imageAspect;
+                        const scale = data.imageScale || 1.0;
+                        let baseW, baseH;
+                        if (imgAspect > boxAspect) {
+                            baseH = data.height;
+                            baseW = baseH * imgAspect;
+                        } else {
+                            baseW = data.width;
+                            baseH = baseW / imgAspect;
+                        }
+
+                        const scaledW = baseW * scale;
+                        const scaledH = baseH * scale;
+                        const maxOffsetX = (scaledW - data.width) / 2;
+                        const maxOffsetY = (scaledH - data.height) / 2;
+
+                        // 現在のオフセットを制限内に収める
+                        const currentOffsetX = data.imageOffsetX || 0;
+                        const currentOffsetY = data.imageOffsetY || 0;
+                        data.imageOffsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, currentOffsetX));
+                        data.imageOffsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, currentOffsetY));
+                    }
+
+                    renderElement(data);
+                    updateUiPositions(data);
+                } else {
+                    updateElementTransform(data);
+                    updateUiPositions(data);
                 }
-                const w = Math.abs(currentX - STATE.elemStart.x);
-                const h = Math.abs(currentY - STATE.elemStart.y);
-                const x = Math.min(currentX, STATE.elemStart.x);
-                const y = Math.min(currentY, STATE.elemStart.y);
-                preview.setAttribute('x', x); preview.setAttribute('y', y);
-                preview.setAttribute('width', w); preview.setAttribute('height', h);
+            }
+
+        } else if (STATE.interactionType === 'crop') {
+            const data = STATE.elements.find(el => el.id === STATE.selectedId);
+            if (data && data.type === 'image') {
+                const dx = (e.clientX - STATE.pointerStart.x) / STATE.view.scale;
+                const dy = (e.clientY - STATE.pointerStart.y) / STATE.view.scale;
+
+                const edge = STATE.cropEdge;
+                const deltaXPct = (dx / data.width) * 100;
+                const deltaYPct = (dy / data.height) * 100;
+
+                if (edge === 'top') {
+                    data.cropTop = Math.max(0, Math.min(50, STATE.elemStart.cropTop + deltaYPct));
+                } else if (edge === 'right') {
+                    data.cropRight = Math.max(0, Math.min(50, STATE.elemStart.cropRight - deltaXPct));
+                } else if (edge === 'bottom') {
+                    data.cropBottom = Math.max(0, Math.min(50, STATE.elemStart.cropBottom - deltaYPct));
+                } else if (edge === 'left') {
+                    data.cropLeft = Math.max(0, Math.min(50, STATE.elemStart.cropLeft + deltaXPct));
+                }
+
+                renderElement(data);
+                renderUi();
+            }
+
+        } else if (STATE.interactionType === 'image-drag') {
+            const data = STATE.elements.find(el => el.id === STATE.selectedId);
+            if (data && data.type === 'image' && data._imageAspect) {
+                const dx = (e.clientX - STATE.pointerStart.x) / STATE.view.scale;
+                const dy = (e.clientY - STATE.pointerStart.y) / STATE.view.scale;
+
+                // カバーフィット基準サイズを計算
+                const boxAspect = data.width / data.height;
+                const imgAspect = data._imageAspect;
+                const scale = data.imageScale || 1.0;
+                let baseW, baseH;
+                if (imgAspect > boxAspect) {
+                    baseH = data.height;
+                    baseW = baseH * imgAspect;
+                } else {
+                    baseW = data.width;
+                    baseH = baseW / imgAspect;
+                }
+
+                // スケール適用後の画像サイズ
+                const scaledW = baseW * scale;
+                const scaledH = baseH * scale;
+
+                // オフセットの制限（画像の端がクリップの端に来るまで）
+                const maxOffsetX = (scaledW - data.width) / 2;
+                const maxOffsetY = (scaledH - data.height) / 2;
+
+                const newOffsetX = STATE.elemStart.offsetX + dx;
+                const newOffsetY = STATE.elemStart.offsetY + dy;
+
+                data.imageOffsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, newOffsetX));
+                data.imageOffsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, newOffsetY));
+
+                renderElement(data);
+                renderUi();
+            }
+
+        } else if (STATE.interactionType === 'image-scale') {
+            const data = STATE.elements.find(el => el.id === STATE.selectedId);
+            if (data && data.type === 'image' && data._imageAspect) {
+                const dx = (e.clientX - STATE.pointerStart.x) / STATE.view.scale;
+                const dy = (e.clientY - STATE.pointerStart.y) / STATE.view.scale;
+
+                // カバーフィット基準サイズを計算
+                const boxAspect = data.width / data.height;
+                const imgAspect = data._imageAspect;
+                let baseW, baseH;
+                if (imgAspect > boxAspect) {
+                    baseH = data.height;
+                    baseW = baseH * imgAspect;
+                } else {
+                    baseW = data.width;
+                    baseH = baseW / imgAspect;
+                }
+
+                // コーナーに応じてスケール計算
+                const corner = STATE.scaleCorner;
+                let scaleChange = 0;
+
+                if (corner === 'nw') {
+                    scaleChange = -(dx + dy) / Math.max(baseW, baseH);
+                } else if (corner === 'ne') {
+                    scaleChange = (dx - dy) / Math.max(baseW, baseH);
+                } else if (corner === 'sw') {
+                    scaleChange = (-dx + dy) / Math.max(baseW, baseH);
+                } else if (corner === 'se') {
+                    scaleChange = (dx + dy) / Math.max(baseW, baseH);
+                }
+
+                // 画像の短辺がクリップの短辺以上になるように最小スケールを計算
+                const minScaleX = data.width / baseW;
+                const minScaleY = data.height / baseH;
+                const minScale = Math.max(minScaleX, minScaleY, 0.1);
+
+                // 新しいスケールを適用
+                data.imageScale = Math.max(minScale, Math.min(10, STATE.elemStart.scale + scaleChange));
+
+                renderElement(data);
+                renderUi();
+            }
+
+        } else if (STATE.interactionType === 'create') {
+            // プレビュー要素の準備
+            let preview = null;
+
+            if (STATE.mode === 'image') {
+                // 画像モード用のグループプレビュー
+                let previewGroup = document.getElementById('creation-preview-group');
+                if (!previewGroup) {
+                    previewGroup = document.createElementNS(SVG_NS, 'g');
+                    previewGroup.id = 'creation-preview-group';
+                    layerUi.appendChild(previewGroup);
+                }
+                // 単一プレビューがあれば削除
+                const singlePreview = document.getElementById('creation-preview');
+                if (singlePreview) singlePreview.remove();
+            } else {
+                // 通常モード: 単一プレビュー要素
+                preview = document.getElementById('creation-preview');
+                if (!preview) {
+                     preview = document.createElementNS(SVG_NS, 'rect');
+                     preview.id = 'creation-preview';
+                     preview.setAttribute('class', 'creation-preview-rect');
+                     layerUi.appendChild(preview);
+                }
+                // 不要なグループがあれば削除
+                const group = document.getElementById('creation-preview-group');
+                if(group) group.remove();
+            }
+            
+            let currentX = pt.x; let currentY = pt.y;
+            let effStartX = STATE.elemStart.x;
+            let effStartY = STATE.elemStart.y;
+            const cGrid = STATE.grid.computed;
+
+            if((STATE.mode === 'text' || STATE.mode === 'heading' || STATE.mode === 'rect' || STATE.mode === 'masthead' || STATE.mode === 'image') && cGrid.charSizeW > 0) {
+                // 特殊処理: 記事配置モードのとき
+                if (STATE.articleSnapMode && STATE.mode === 'text') {
+                    // X軸:
+                    // 開始点は常に「行頭（右端）」、現在点は常に「行末（左端）」にスナップ
+                    // これにより、常に「列の幅」単位でボックスが確保される
+                    const sX = getClosestColumnRightEdge(STATE.elemStart.x);
+                    const cX = getClosestColumnLeftEdge(currentX);
+                    
+                    // Y軸:
+                    // ボックスの上辺は必ず「段の上端」、下辺は必ず「段の下端」にスナップさせる
+                    // これにより「段間（隙間）」にボックスの端が止まることを防ぐ
+                    const rawTop = Math.min(STATE.elemStart.y, currentY);
+                    const rawBottom = Math.max(STATE.elemStart.y, currentY);
+                    
+                    // 範囲の上端は、最も近い「段の開始位置」へ
+                    const snappedTop = snapY_DanTop(rawTop);
+                    // 範囲の下端は、最も近い「段の終了位置」へ
+                    const snappedBottom = snapY_DanBottom(rawBottom);
+                    
+                    // 座標とサイズを決定
+                    const x = Math.min(sX, cX);
+                    const width = Math.abs(sX - cX);
+                    const y = snappedTop;
+                    const height = snappedBottom - snappedTop;
+                    
+                    // 幅または高さが確保できない場合（同一行・同一段内にいる場合など）は非表示
+                    if (width < 1 || height < 1) {
+                        if (preview) preview.remove();
+                        return;
+                    }
+
+                    // プレビュー更新
+                    if (preview) {
+                        preview.setAttribute('x', x);
+                        preview.setAttribute('y', y);
+                        preview.setAttribute('width', width);
+                        preview.setAttribute('height', height);
+
+                        if (!preview.parentNode) layerUi.appendChild(preview);
+                    }
+                    return;
+
+                } else {
+                    // 通常モード（従来ロジック）
+                    if (currentX >= STATE.elemStart.x) {
+                        effStartX = getClosestColumnLeftEdge(STATE.elemStart.x); currentX = getClosestColumnRightEdge(currentX);
+                    } else {
+                        effStartX = getClosestColumnRightEdge(STATE.elemStart.x); currentX = getClosestColumnLeftEdge(currentX);
+                    }
+                    if (currentY >= STATE.elemStart.y) {
+                        effStartY = (STATE.mode === 'text' && STATE.articleSnapMode) ? snapY_DanTop(STATE.elemStart.y) : snapY(STATE.elemStart.y, true);
+                        currentY = (STATE.mode === 'text' && STATE.articleSnapMode) ? snapY_DanBottom(currentY) : snapY(currentY, false);
+                    } else {
+                        effStartY = (STATE.mode === 'text' && STATE.articleSnapMode) ? snapY_DanBottom(STATE.elemStart.y) : snapY(STATE.elemStart.y, false);
+                        currentY = (STATE.mode === 'text' && STATE.articleSnapMode) ? snapY_DanTop(currentY) : snapY(currentY, true);
+                    }
+                }
+            }
+            
+            const w = Math.abs(currentX - effStartX);
+            const h = Math.abs(currentY - effStartY);
+            const x = Math.min(currentX, effStartX);
+            const y = Math.min(currentY, effStartY);
+
+            if (STATE.mode === 'image') {
+                // 画像ボックスのプレビュー（ボックスシャドウ付き）
+                const previewGroup = document.getElementById('creation-preview-group');
+                if (!previewGroup) return;
+
+                previewGroup.innerHTML = '';
+
+                const gap = (cGrid.lineGap && cGrid.lineGap > 0) ? cGrid.lineGap : 5;
+
+                // ボックスシャドウ（左右のみ）
+                const shadowRect = document.createElementNS(SVG_NS, 'rect');
+                shadowRect.setAttribute('x', x - gap);
+                shadowRect.setAttribute('y', y);
+                shadowRect.setAttribute('width', w + gap * 2);
+                shadowRect.setAttribute('height', h);
+                shadowRect.setAttribute('class', 'paper-fill');
+                shadowRect.setAttribute('opacity', '0.5');
+                previewGroup.appendChild(shadowRect);
+
+                // メインボックス
+                const mainRect = document.createElementNS(SVG_NS, 'rect');
+                mainRect.setAttribute('x', x);
+                mainRect.setAttribute('y', y);
+                mainRect.setAttribute('width', w);
+                mainRect.setAttribute('height', h);
+                mainRect.setAttribute('class', 'creation-preview-rect');
+                previewGroup.appendChild(mainRect);
+            } else {
+                if (preview) {
+                    preview.setAttribute('x', x); preview.setAttribute('y', y);
+                    preview.setAttribute('width', w); preview.setAttribute('height', h);
+                    if (!preview.parentNode) layerUi.appendChild(preview);
+                }
             }
         }
     }
 
     function onPointerUp(e) {
         if (e.pointerId !== STATE.activePointerId) return;
-        
-        if (STATE.interactionType === 'drag' || STATE.interactionType === 'resize') {
-            const data = STATE.elements.find(el => el.id === STATE.selectedId);
-            if (data) {
-                renderElement(data); 
-                renderUi();
-            }
-        } else if (STATE.interactionType === 'create') {
-            const preview = document.getElementById('creation-preview');
-            if(preview) {
-                const w = parseFloat(preview.getAttribute('width'));
-                const h = parseFloat(preview.getAttribute('height'));
-                const x = parseFloat(preview.getAttribute('x'));
-                const y = parseFloat(preview.getAttribute('y'));
-                if (w > 10 && h > 10) {
-                    createObjectFromRect({x, y, w, h});
+        const wasInteracting = (STATE.interactionType === 'drag' || STATE.interactionType === 'resize');
+
+        if (STATE.interactionType === 'linking') {
+            const pt = getSvgPoint(e.clientX, e.clientY);
+            let targetId = null;
+            for (const el of STATE.elements) {
+                if (el.id === STATE.linking.sourceId) continue;
+                if (el.type !== 'text') continue;
+                if (el.next || el.prev) continue;
+
+                if (pt.x >= el.x && pt.x <= el.x + el.width && pt.y >= el.y && pt.y <= el.y + el.height) {
+                    targetId = el.id;
+                    break;
                 }
+            }
+            if (targetId) {
+                connectBlocks(STATE.linking.sourceId, targetId);
+            }
+            if (STATE.linking.lineEl) STATE.linking.lineEl.remove();
+            STATE.linking = null;
+            
+            clearLinkCandidates();
+            renderUi();
+        }
+
+        if (STATE.interactionType === 'create') {
+            const preview = document.getElementById('creation-preview');
+            const group = document.getElementById('creation-preview-group');
+
+            let x, y, w, h;
+
+            // 画像モードの場合はグループから、それ以外はpreviewから座標取得
+            if (group) {
+                // グループ内のメインボックス（2番目の子要素）から座標取得
+                const mainRect = group.children[1];
+                if (mainRect) {
+                    w = parseFloat(mainRect.getAttribute('width'));
+                    h = parseFloat(mainRect.getAttribute('height'));
+                    x = parseFloat(mainRect.getAttribute('x'));
+                    y = parseFloat(mainRect.getAttribute('y'));
+                    if (w > 5 && h > 5) createObjectFromRect({x, y, w, h});
+                }
+                group.remove();
+            } else if(preview) {
+                w = parseFloat(preview.getAttribute('width'));
+                h = parseFloat(preview.getAttribute('height'));
+                x = parseFloat(preview.getAttribute('x'));
+                y = parseFloat(preview.getAttribute('y'));
+                if (w > 5 && h > 5) createObjectFromRect({x, y, w, h});
                 preview.remove();
             }
         }
-        STATE.activePointerId = null;
-        STATE.interactionType = null;
+        
+        STATE.activePointerId = null; STATE.interactionType = null;
         try { e.target.releasePointerCapture(e.pointerId); } catch(err){}
+
+        if (wasInteracting) {
+            const data = STATE.elements.find(el => el.id === STATE.selectedId);
+            if (data) {
+                if(data.type === 'text') {
+                    const head = findChainHead(data);
+                    updateTextChain(head);
+                } else {
+                    renderElement(data);
+                }
+                renderUi();
+                if (data.type === 'heading' || data.type === 'masthead') {
+                    requestAnimationFrame(() => measureHeadingInk(data, getHeadingCacheKey(data), data.height > data.width));
+                }
+            }
+        }
+    }
+
+    // --- Link Logic ---
+    function connectBlocks(sourceId, targetId) {
+        const source = STATE.elements.find(e => e.id === sourceId);
+        const target = STATE.elements.find(e => e.id === targetId);
+        if (!source || !target || source.type !== 'text' || target.type !== 'text') return;
+        
+        if (target.next) return; 
+        if (target.prev) return; 
+        
+        let curr = source;
+        while(curr) {
+            if (curr.id === targetId) return; 
+            if (curr.prev) curr = STATE.elements.find(e => e.id === curr.prev);
+            else break;
+        }
+
+        source.next = targetId;
+        target.prev = sourceId;
+        
+        const head = findChainHead(source);
+        updateTextChain(head);
+    }
+
+    function disconnectBlock(sourceId) {
+        const source = STATE.elements.find(e => e.id === sourceId);
+        if (!source || !source.next) return;
+        
+        const nextId = source.next;
+        const nextEl = STATE.elements.find(e => e.id === nextId);
+        
+        source.next = null;
+        if (nextEl) {
+            nextEl.prev = null;
+            delete nextEl._renderedText;
+            if (!nextEl.text) nextEl.text = "新規記事";
+            renderElement(nextEl);
+        }
+        
+        const head = findChainHead(source);
+        updateTextChain(head);
+        renderUi();
+    }
+
+    function findChainHead(block) {
+        let curr = block;
+        while (curr.prev) {
+            const prev = STATE.elements.find(e => e.id === curr.prev);
+            if (!prev) { curr.prev = null; break; } 
+            curr = prev;
+        }
+        return curr;
+    }
+
+    function updateTextChain(head) {
+        if (!head || head.type !== 'text') return;
+        
+        let curr = head;
+        let remainingText = head.text; 
+        
+        while(curr) {
+            const res = measureCapacity(curr, remainingText);
+            curr._renderedText = res.fitted; 
+            remainingText = res.remaining;
+            
+            renderElement(curr);
+            
+            if (curr.next) {
+                const next = STATE.elements.find(e => e.id === curr.next);
+                if (!next) { curr.next = null; break; }
+                curr = next;
+            } else {
+                curr = null;
+            }
+        }
+    }
+
+    // Internal Column Logic Helper
+    function getIntersectingDans(data) {
+        const cGrid = STATE.grid.computed;
+        if (!STATE.grid.show || !cGrid.danPitch) {
+            return [{ yOffset: 0, height: data.height, localY: 0 }];
+        }
+
+        const mt = STATE.canvas.margin.top * PX_PER_MM;
+        const boxTop = data.y;
+        const boxBottom = data.y + data.height;
+        
+        const segments = [];
+        const epsilon = 1.0; 
+
+        for (let i = 0; i < STATE.grid.dan; i++) {
+            const danTop = mt + (i * cGrid.danPitch);
+            const danBottom = danTop + cGrid.danHeight;
+            
+            const start = Math.max(boxTop, danTop - epsilon);
+            const end = Math.min(boxBottom, danBottom + epsilon);
+
+            if (end > start + 5) {
+                 const localY = danTop - boxTop;
+                 segments.push({
+                     danIndex: i,
+                     danTop: danTop,
+                     localY: localY, 
+                     height: cGrid.danHeight
+                 });
+            }
+        }
+        
+        if (segments.length === 0) return [{ yOffset: 0, height: data.height, localY: 0 }];
+        
+        return segments;
+    }
+
+    function getLayoutMetrics(data, forcedHeight) {
+        const cGrid = STATE.grid.computed;
+        let fontSize, charHeight, pitchX;
+        
+        if (cGrid.charSizeW > 0 && STATE.grid.show) { 
+            fontSize = cGrid.charSizeW;
+            charHeight = cGrid.charSizeH;
+            pitchX = cGrid.pitchX;
+        } else {
+            fontSize = data.fontSize;
+            charHeight = data.fontSize;
+            pitchX = data.fontSize * data.lineHeight;
+        }
+
+        const w = data.width;
+        const h = forcedHeight !== undefined ? forcedHeight : data.height;
+        
+        const charsPerLine = Math.max(1, Math.floor((h + 0.5) / charHeight));
+        
+        let maxLines = 1;
+        if (w >= fontSize) {
+            maxLines = 1 + Math.floor((w - fontSize + 0.5) / pitchX);
+        } else {
+            maxLines = 0;
+        }
+
+        return { fontSize, charHeight, pitchX, charsPerLine, maxLines };
+    }
+
+    function measureCapacity(data, text) {
+        if (!text) return { fitted: "", remaining: "" };
+
+        let segments;
+        const useSnapMode = data.snapMode !== undefined ? data.snapMode : STATE.articleSnapMode;
+        if (useSnapMode) {
+             segments = getIntersectingDans(data);
+        } else {
+             segments = [{ height: data.height, localY: 0 }];
+        }
+        
+        let splitIndex = 0;
+        let charIndex = 0;
+        
+        for (const seg of segments) {
+            const metrics = getLayoutMetrics(data, seg.height);
+            const { charsPerLine, maxLines } = metrics;
+            
+            let currentLine = 1;
+            let currentCharInLine = 0;
+            
+            while (charIndex < text.length) {
+                const char = text[charIndex];
+                charIndex++;
+                
+                if (char === '\n') {
+                    currentLine++;
+                    currentCharInLine = 0;
+                } else {
+                    currentCharInLine++;
+                    if (currentCharInLine > charsPerLine) {
+                        currentLine++;
+                        currentCharInLine = 1;
+                    }
+                }
+                
+                if (currentLine > maxLines) {
+                    charIndex--; 
+                    break;
+                }
+            }
+            splitIndex = charIndex;
+            if (splitIndex >= text.length) break;
+        }
+
+        return {
+            fitted: text.substring(0, splitIndex),
+            remaining: text.substring(splitIndex)
+        };
+    }
+
+    // --- Helper Snaps ---
+    function getColumnIndexAt(rawX) {
+        const cGrid = STATE.grid.computed;
+        const mr = STATE.canvas.margin.right * PX_PER_MM;
+        const w_px = STATE.canvas.width * PX_PER_MM;
+        const rightEdge = w_px - mr;
+        const center0 = rightEdge - (cGrid.charSizeW / 2);
+        return Math.round((center0 - rawX) / cGrid.pitchX);
+    }
+
+    function getClosestColumnRightEdge(rawX) {
+        const cGrid = STATE.grid.computed;
+        const col = getColumnIndexAt(rawX);
+        const mr = STATE.canvas.margin.right * PX_PER_MM;
+        const w_px = STATE.canvas.width * PX_PER_MM;
+        const rightEdge = w_px - mr; 
+        return rightEdge - (col * cGrid.pitchX);
+    }
+
+    function getClosestColumnLeftEdge(rawX) {
+        const cGrid = STATE.grid.computed;
+        return getClosestColumnRightEdge(rawX) - cGrid.charSizeW;
+    }
+    
+    // 左右どちらか近い方の列グリッド線を取得
+    function getClosestColumnGridLine(rawX) {
+        const cGrid = STATE.grid.computed;
+        const col = getColumnIndexAt(rawX);
+        const mr = STATE.canvas.margin.right * PX_PER_MM;
+        const w_px = STATE.canvas.width * PX_PER_MM;
+        const rightEdgeBase = w_px - mr; 
+        const rEdge = rightEdgeBase - (col * cGrid.pitchX);
+        const lEdge = rEdge - cGrid.charSizeW;
+        return Math.abs(rawX - rEdge) < Math.abs(rawX - lEdge) ? rEdge : lEdge;
+    }
+    
+    // ドラッグ進行方向にある、最も近い有効な列境界線を取得
+    function getSnapEdgeX(rawX, diffX) {
+        const cGrid = STATE.grid.computed;
+        const col = getColumnIndexAt(rawX);
+        const mr = STATE.canvas.margin.right * PX_PER_MM;
+        const w_px = STATE.canvas.width * PX_PER_MM;
+        const rightEdgeBase = w_px - mr; 
+        
+        // その列の右端と左端
+        const rEdge = rightEdgeBase - (col * cGrid.pitchX);
+        const lEdge = rEdge - cGrid.charSizeW;
+        
+        // どちらに動いているか
+        if (diffX > 0) {
+            // 右へドラッグ中 -> 右側にある有効なエッジを探す
+            if (rawX > rEdge) {
+                return getClosestColumnGridLine(rawX + cGrid.lineGap/2); // 少し先読み
+            } else {
+                return getClosestColumnGridLine(rawX + 5); 
+            }
+        } else {
+            // 左へドラッグ中
+            return getClosestColumnGridLine(rawX - 5);
+        }
+    }
+
+    // --- Gap回避スナップ関数 (New) ---
+    // Y座標が段間(Gap)にある場合、そのGapの手前（前の段の下端）に強制的に戻す
+    // 段内にある場合は、行送り(charSizeH)単位でスナップさせる
+    function snapY_StrictGap(rawY) {
+        const cGrid = STATE.grid.computed;
+        if (!cGrid.danHeight || cGrid.charSizeH <= 0) return rawY;
+
+        const mt = STATE.canvas.margin.top * PX_PER_MM;
+        const relY = rawY - mt;
+
+        // どの段のエリアにいるか（Gap含む）
+        const danPitch = cGrid.danPitch;
+        const danIndex = Math.floor(relY / danPitch);
+        const offsetInDan = relY % danPitch; // 段Topからの距離
+
+        // 範囲外（上端より上、最終段より下）のガード
+        if (danIndex < 0) return mt;
+        if (danIndex >= STATE.grid.dan) return mt + (STATE.grid.dan * danPitch) - (danPitch - cGrid.danHeight);
+
+        // Gap判定
+        if (offsetInDan > cGrid.danHeight) {
+            // Gapの中にいる -> 次の段の上端にスナップ
+            return mt + ((danIndex + 1) * danPitch);
+        } else {
+            // 段の中にいる -> この段の上端にスナップ
+            return mt + (danIndex * danPitch);
+        }
+    }
+
+    // 下端リサイズ用: 段の下端にスナップ
+    function snapY_StrictGap_Bottom(rawY) {
+        const cGrid = STATE.grid.computed;
+        if (!cGrid.danHeight || cGrid.charSizeH <= 0) return rawY;
+
+        const mt = STATE.canvas.margin.top * PX_PER_MM;
+        const relY = rawY - mt;
+
+        // どの段のエリアにいるか（Gap含む）
+        const danPitch = cGrid.danPitch;
+        const danIndex = Math.floor(relY / danPitch);
+        const offsetInDan = relY % danPitch; // 段Topからの距離
+
+        // 範囲外（上端より上、最終段より下）のガード
+        if (danIndex < 0) return mt;
+        if (danIndex >= STATE.grid.dan) return mt + (STATE.grid.dan * danPitch) - (danPitch - cGrid.danHeight);
+
+        // Gap判定
+        if (offsetInDan > cGrid.danHeight) {
+            // Gapの中にいる -> 次の段の下端にスナップ
+            return mt + ((danIndex + 1) * danPitch) + cGrid.danHeight;
+        } else {
+            // 段の中にいる -> この段の下端にスナップ
+            return mt + (danIndex * danPitch) + cGrid.danHeight;
+        }
+    }
+
+    function snapY(rawY, isTopEdge) {
+        const cGrid = STATE.grid.computed; if (cGrid.charSizeH <= 0) return rawY;
+        const mt = STATE.canvas.margin.top * PX_PER_MM; const relY = rawY - mt;
+        const danIndex = Math.floor(relY / cGrid.danPitch); const danStart = mt + (danIndex * cGrid.danPitch);
+        const charIndex = Math.round((rawY - danStart) / cGrid.charSizeH);
+        return danStart + (charIndex * cGrid.charSizeH);
+    }
+    
+    function snapY_Dan(rawY) { return snapY_DanTop(rawY); }
+
+    function snapY_DanTop(rawY) {
+        const cGrid = STATE.grid.computed;
+        if (!cGrid.danHeight) return rawY;
+        const mt = STATE.canvas.margin.top * PX_PER_MM;
+        let candidates = [];
+        for(let i=0; i<STATE.grid.dan; i++) {
+            candidates.push(mt + (i * cGrid.danPitch));
+        }
+        return candidates.reduce((prev, curr) => Math.abs(curr - rawY) < Math.abs(prev - rawY) ? curr : prev);
+    }
+
+    function snapY_DanBottom(rawY) {
+        const cGrid = STATE.grid.computed;
+        if (!cGrid.danHeight) return rawY;
+        const mt = STATE.canvas.margin.top * PX_PER_MM;
+        let candidates = [];
+        for(let i=0; i<STATE.grid.dan; i++) {
+            candidates.push(mt + (i * cGrid.danPitch) + cGrid.danHeight);
+        }
+        return candidates.reduce((prev, curr) => Math.abs(curr - rawY) < Math.abs(prev - rawY) ? curr : prev);
+    }
+    
+    // 最も近い段の境界（上端または下端）を取得
+    function getClosestDanEdge(rawY) {
+        const cGrid = STATE.grid.computed;
+        if (!cGrid.danHeight) return rawY;
+        const mt = STATE.canvas.margin.top * PX_PER_MM;
+        let bestY = rawY;
+        let minD = Infinity;
+
+        for(let i=0; i<STATE.grid.dan; i++) {
+            const top = mt + (i * cGrid.danPitch);
+            const bottom = top + cGrid.danHeight;
+            
+            if(Math.abs(top - rawY) < minD) { minD = Math.abs(top - rawY); bestY = top; }
+            if(Math.abs(bottom - rawY) < minD) { minD = Math.abs(bottom - rawY); bestY = bottom; }
+        }
+        return bestY;
+    }
+    
+    // ドラッグ進行方向にある、最も近い有効な段境界線を取得
+    function getSnapEdgeY(rawY, diffY) {
+        const cGrid = STATE.grid.computed;
+        if (!cGrid.danHeight) return rawY;
+        
+        // 段間のギャップ（danPitch - danHeight）を考慮
+        // Gapの中にいるとき、下に引いたら下の段のTop、上に引いたら上の段のBottomを選びたい。
+        // getClosestDanEdge は距離だけで選ぶので、Gapの中央付近では意図しない側に飛ぶ可能性がある。
+        // そこで、進行方向に少しオフセットした位置での Nearest を取る。
+        
+        const gap = cGrid.danPitch - cGrid.danHeight;
+        const offset = diffY !== 0 ? Math.sign(diffY) * (gap/2 + 1) : 0;
+        return getClosestDanEdge(rawY + offset);
     }
 
     // --- Touch (Pinch Zoom) ---
     function onTouchStart(e) {
         if (e.touches.length === 2) {
-            e.preventDefault();
-            STATE.activePointerId = null; 
-            STATE.interactionType = null;
+            e.preventDefault(); STATE.activePointerId = null; STATE.interactionType = null;
             const dx = e.touches[0].clientX - e.touches[1].clientX;
             const dy = e.touches[0].clientY - e.touches[1].clientY;
             STATE.touchStartDist = Math.sqrt(dx * dx + dy * dy);
@@ -560,17 +1547,15 @@
             e.preventDefault();
             const dx = e.touches[0].clientX - e.touches[1].clientX;
             const dy = e.touches[0].clientY - e.touches[1].clientY;
-            const currentDist = Math.sqrt(dx * dx + dy * dy);
+            const zoomFactor = Math.sqrt(dx * dx + dy * dy) / STATE.touchStartDist;
+            let newScale = Math.max(0.1, Math.min(STATE.viewStart.scale * zoomFactor, 10.0));
+            const rect = viewport.getBoundingClientRect();
             const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
             const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-            const zoomFactor = currentDist / STATE.touchStartDist;
-            let newScale = STATE.viewStart.scale * zoomFactor;
-            newScale = Math.max(0.1, Math.min(newScale, 10.0));
-            const rect = viewport.getBoundingClientRect();
             const vx = cx - rect.left; const vy = cy - rect.top;
-            const newX = vx - (STATE.pinchStartCanvas.x * newScale);
-            const newY = vy - (STATE.pinchStartCanvas.y * newScale);
-            STATE.view.scale = newScale; STATE.view.x = newX; STATE.view.y = newY;
+            STATE.view.scale = newScale;
+            STATE.view.x = vx - (STATE.pinchStartCanvas.x * newScale);
+            STATE.view.y = vy - (STATE.pinchStartCanvas.y * newScale);
             updateTransform();
         }
     }
@@ -578,15 +1563,13 @@
     function onWheel(e) {
         e.preventDefault();
         if (e.altKey || e.ctrlKey) {
-            const zoomFactor = 0.05;
             const delta = -Math.sign(e.deltaY);
-            let newScale = STATE.view.scale * (1 + delta * zoomFactor);
-            newScale = Math.max(0.1, Math.min(newScale, 10.0));
+            let newScale = Math.max(0.1, Math.min(STATE.view.scale * (1 + delta * 0.05), 10.0));
             const rect = viewport.getBoundingClientRect();
             const mouseX = e.clientX - rect.left; const mouseY = e.clientY - rect.top;
-            const newX = mouseX - (mouseX - STATE.view.x) * (newScale / STATE.view.scale);
-            const newY = mouseY - (mouseY - STATE.view.y) * (newScale / STATE.view.scale);
-            STATE.view.scale = newScale; STATE.view.x = newX; STATE.view.y = newY;
+            STATE.view.x = mouseX - (mouseX - STATE.view.x) * (newScale / STATE.view.scale);
+            STATE.view.y = mouseY - (mouseY - STATE.view.y) * (newScale / STATE.view.scale);
+            STATE.view.scale = newScale;
         } else { STATE.view.x -= e.deltaX; STATE.view.y -= e.deltaY; }
         updateTransform();
     }
@@ -597,56 +1580,136 @@
         document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
         if(mode === 'select') document.getElementById('btn-select').classList.add('active');
         if(mode === 'text') document.getElementById('btn-text').classList.add('active');
+        if(mode === 'heading') document.getElementById('btn-heading').classList.add('active');
+        if(mode === 'masthead') document.getElementById('btn-masthead').classList.add('active');
         if(mode === 'rect') document.getElementById('btn-rect').classList.add('active');
+        if(mode === 'image') document.getElementById('btn-image').classList.add('active');
+
         viewport.className = 'viewport';
-        if(mode === 'text' || mode === 'rect') viewport.classList.add('mode-create');
-        if(mode !== 'select') { STATE.selectedId = null; renderUi(); }
+        // ハンドツール用のクラス付与
+        if(mode === 'select') viewport.classList.add('mode-select');
+        else viewport.classList.add('mode-create');
+        
+        // モード切替時に選択解除はしない（シームレスに移動したい場合があるため）
+        if(mode !== 'select') { 
+            // 作成モードに切り替えた場合は、選択解除したほうが誤操作が少ないか？
+            // 前回の変更で「作成モードでも要素クリックで選択可能」にしたので、解除しなくても良い。
+            // STATE.selectedId = null; renderUi(); 
+        }
+    }
+
+    function updateSnapMode() {
+        const cbNone = document.getElementById('inp-snap-article');
+        const cbText = document.getElementById('inp-snap-article-txt');
+
+        // 選択中の記事ボックスがある場合は、そのボックスのsnapModeを更新
+        if (STATE.selectedId) {
+            const data = STATE.elements.find(el => el.id === STATE.selectedId);
+            if (data && data.type === 'text') {
+                if (document.activeElement === cbText) {
+                    data.snapMode = cbText.checked;
+                    cbNone.checked = cbText.checked; // 同期
+                    STATE.articleSnapMode = cbText.checked; // グローバルも更新（新規作成時のデフォルト値として）
+                }
+
+                // 選択中のボックスのチェーンを再計算
+                const head = findChainHead(data);
+                updateTextChain(head);
+                renderUi();
+                return;
+            }
+        }
+
+        // 選択中のボックスがない場合は、グローバル設定のみ更新
+        if (document.activeElement === cbNone) {
+            STATE.articleSnapMode = cbNone.checked;
+            cbText.checked = STATE.articleSnapMode;
+        } else if (document.activeElement === cbText) {
+            STATE.articleSnapMode = cbText.checked;
+            cbNone.checked = STATE.articleSnapMode;
+        } else {
+            STATE.articleSnapMode = cbNone.checked;
+        }
     }
 
     function createObjectFromRect(rect) {
-        const id = createID();
+        const id = 'el_' + Math.random().toString(36).substr(2, 9);
         const cGrid = STATE.grid.computed;
         const initFontSize = cGrid.charSizeW > 0 ? cGrid.charSizeW : 24;
         const initLineHeight = cGrid.charSizeW > 0 ? (cGrid.lineGap / cGrid.charSizeW) + 1 : 1.5;
         let data;
+
         if (STATE.mode === 'text') {
             data = {
-                id: id, type: 'text',
-                x: rect.x, y: rect.y, width: rect.w, height: rect.h,
-                text: "新規記事",
-                fontSize: initFontSize,
-                lineHeight: initLineHeight,
-                writingMode: 'vertical-rl',
-                fontFamily: '"BIZ UDMincho", serif',
-                charScale: 85,
-                showGrid: false
+                id, type: 'text', x: rect.x, y: rect.y, width: rect.w, height: rect.h,
+                text: "新規記事", fontSize: initFontSize, lineHeight: initLineHeight,
+                writingMode: 'vertical-rl', fontFamily: '"BIZ UDMincho", serif', charScale: 85, showGrid: false,
+                snapMode: STATE.articleSnapMode // 個別の記事配置モード設定
+            };
+        } else if (STATE.mode === 'heading') {
+            data = {
+                id, type: 'heading', x: rect.x, y: rect.y, width: rect.w, height: rect.h,
+                text: "見出し", paddingV: 5, paddingH: 5, fontFamily: '"Noto Sans JP", sans-serif',
+                inverted: false
+            };
+        } else if (STATE.mode === 'masthead') {
+            data = {
+                id, type: 'masthead', x: rect.x, y: rect.y, width: rect.w, height: rect.h,
+                text: "新聞題字", fontFamily: '"Noto Serif JP", serif', /* Default Font Changed */
+                borderWidthOuter: 1.0, borderWidthInner: 0.3, patternLineHeight: 0.4,
+                paddingH: 5, paddingV: 5, textStrokeWidth: 4, inverted: false
+            };
+        } else if (STATE.mode === 'image') {
+            // 画像ボックスを作成
+            data = {
+                id, type: 'image', x: rect.x, y: rect.y, width: rect.w, height: rect.h,
+                imageUrl: null, // ファイル選択で設定
+                imageScale: 1.0, // 画像のスケール（1.0 = カバーフィット基準）
+                imageOffsetX: 0, // 画像のX方向オフセット（px）
+                imageOffsetY: 0  // 画像のY方向オフセット（px）
             };
         } else {
+            // Rename to Fill: Create a filled rectangle using ink color
+            // デフォルトは紙色, 枠線なし
             data = {
-                id: id, type: 'rect',
-                x: rect.x, y: rect.y, width: rect.w, height: rect.h,
-                fill: 'none', stroke: STATE.canvas.colors.ink
+                id, type: 'rect', x: rect.x, y: rect.y, width: rect.w, height: rect.h,
+                fillMode: 'paper', // 'paper' or 'ink'
+                borderStyle: 'none', // none, solid, dotted, double
+                borderWidth: 0.5 // mm
             };
         }
         STATE.elements.push(data);
         renderElement(data);
-        setMode('select');
+        if (data.type === 'heading' || data.type === 'masthead') setTimeout(() => measureHeadingInk(data, getHeadingCacheKey(data), data.height > data.width), 50);
+        
+        // 連続作成のため、ツール切り替え（setMode('select')）を削除
         selectElement(id);
     }
     
     function updateElementTransform(data) {
         const group = document.getElementById(data.id);
         if(!group) return;
-        const scaleVal = (data.charScale || 85) / 100;
+        
         let trans = `translate(${data.x}, ${data.y})`;
-        if (data.type === 'text' && data.writingMode === 'vertical-rl') trans += ` scale(1, ${scaleVal})`;
+        if (data.type === 'text') {
+            const scaleVal = (data.charScale || 85) / 100;
+            trans += (data.writingMode === 'vertical-rl') ? ` scale(1, ${scaleVal})` : ` scale(${scaleVal}, 1)`;
+        } 
+        if (data.type === 'heading' || data.type === 'masthead') {
+            renderElement(data); 
+            return;
+        }
         group.setAttribute('transform', trans);
         const hitRect = group.querySelector('.hit-rect');
         if (hitRect) {
             let effW = data.width; let effH = data.height;
-            if (data.type === 'text' && data.writingMode === 'vertical-rl') effH = data.height / scaleVal;
+            if (data.type === 'text' && data.writingMode === 'vertical-rl') effH = data.height / ((data.charScale||85)/100);
             hitRect.setAttribute('width', effW); hitRect.setAttribute('height', effH);
         }
+    }
+
+    function getHeadingCacheKey(data) {
+        return data.text + '_' + data.fontFamily + '_' + (data.height > data.width);
     }
 
     function renderElement(data) {
@@ -656,114 +1719,948 @@
             group.id = data.id;
             layerContent.appendChild(group);
         }
-        const scaleVal = (data.charScale || 85) / 100;
-        let trans = `translate(${data.x}, ${data.y})`;
-        if (data.type === 'text') {
-             if (data.writingMode === 'vertical-rl') trans += ` scale(1, ${scaleVal})`;
-             else trans += ` scale(${scaleVal}, 1)`;
-        }
-        group.setAttribute('transform', trans);
         group.innerHTML = '';
-        
-        let effW = data.width; let effH = data.height;
-        if (data.type === 'text' && data.writingMode === 'vertical-rl') effH = data.height / scaleVal;
-
-        // Hit Rect (Transparent white for capture)
-        const hitRect = document.createElementNS(SVG_NS, 'rect');
-        hitRect.setAttribute('class', 'hit-rect');
-        hitRect.setAttribute('x', 0); hitRect.setAttribute('y', 0);
-        hitRect.setAttribute('width', effW); hitRect.setAttribute('height', effH);
-        group.appendChild(hitRect);
 
         if (data.type === 'text') {
-            const cGrid = STATE.grid.computed;
-            let drawFontSize = data.fontSize;
-            let drawPitchX = data.fontSize * data.lineHeight;
-            if (cGrid.charSizeW > 0) { drawFontSize = cGrid.charSizeW; drawPitchX = cGrid.pitchX; }
+            const scaleVal = (data.charScale || 85) / 100;
+            // The main group handles the top-left positioning and scaling
+            let trans = `translate(${data.x}, ${data.y})`;
+            trans += (data.writingMode === 'vertical-rl') ? ` scale(1, ${scaleVal})` : ` scale(${scaleVal}, 1)`;
+            group.setAttribute('transform', trans);
+
+            const contentToRender = (data.prev !== undefined && data.prev !== null) ? (data._renderedText || "") : (data._renderedText !== undefined ? data._renderedText : data.text);
+            
+            // --- Multi-Dan Internal Rendering ---
+            let segments;
+            const useSnapMode = data.snapMode !== undefined ? data.snapMode : STATE.articleSnapMode;
+            if (useSnapMode) {
+                segments = getIntersectingDans(data);
+            } else {
+                // Free Mode: Single segment ignoring Dans
+                segments = [{ height: data.height, localY: 0 }];
+            }
+
+            let charCursor = 0;
+            const gap = (STATE.grid.computed.lineGap && STATE.grid.computed.lineGap > 0) ? STATE.grid.computed.lineGap : 5;
+
+            // Render each segment
+            for (const seg of segments) {
+                // Determine render height for this segment
+                let segRenderHeight = seg.height;
+                if (data.writingMode === 'vertical-rl') segRenderHeight = seg.height / scaleVal;
+
+                const segGroup = document.createElementNS(SVG_NS, 'g');
+                const segY = seg.localY / scaleVal;
+                segGroup.setAttribute('transform', `translate(0, ${segY})`);
+
+                // 1. Background (only in Free Mode, per original logic, but now per segment)
+                if (!useSnapMode) {
+                    const bgRect = document.createElementNS(SVG_NS, 'rect');
+                    bgRect.setAttribute('x', -gap);
+                    bgRect.setAttribute('y', 0);
+                    bgRect.setAttribute('width', data.width + gap * 2);
+                    bgRect.setAttribute('height', segRenderHeight);
+                    bgRect.setAttribute('class', 'paper-fill');
+                    segGroup.appendChild(bgRect);
+                }
+
+                // 2. Hit Rect (Segment specific) -> これにより段間にはHitRectが生成されなくなる
+                const hitRect = document.createElementNS(SVG_NS, 'rect');
+                hitRect.setAttribute('class', 'hit-rect');
+                hitRect.setAttribute('width', data.width); 
+                hitRect.setAttribute('height', segRenderHeight);
+                segGroup.appendChild(hitRect);
+
+                // 3. Text Content
+                if (charCursor < contentToRender.length) {
+                    const metrics = getLayoutMetrics(data, seg.height);
+                    const { fontSize, charHeight, pitchX, charsPerLine, maxLines } = metrics;
+                    const renderCharHeight = charHeight / scaleVal; 
+                    
+                    const textEl = document.createElementNS(SVG_NS, 'text');
+                    textEl.setAttribute('font-family', data.fontFamily);
+                    textEl.setAttribute('font-size', fontSize);
+                    textEl.setAttribute('writing-mode', data.writingMode);
+                    textEl.setAttribute('dominant-baseline', 'central'); 
+                    textEl.setAttribute('text-anchor', 'middle');
+                    textEl.setAttribute('class', 'ink-fill'); 
+                    textEl.style.fontFamily = data.fontFamily;
+
+                    let currentLineIdx = 0;
+                    let currentCharIdx = 0;
+                    
+                    while (charCursor < contentToRender.length) {
+                        const char = contentToRender[charCursor];
+                        charCursor++;
+
+                        if (char === '\n') {
+                            currentLineIdx++;
+                            currentCharIdx = 0;
+                            if (currentLineIdx >= maxLines) break; 
+                            continue;
+                        }
+
+                        if (currentCharIdx >= charsPerLine) {
+                            currentLineIdx++;
+                            currentCharIdx = 0;
+                        }
+                        
+                        if (currentLineIdx >= maxLines) {
+                            charCursor--; 
+                            break;
+                        }
+
+                        const centerX = data.width - (fontSize / 2) - (currentLineIdx * pitchX);
+                        const centerY = (currentCharIdx * renderCharHeight) + (renderCharHeight / 2);
+
+                        const tspan = document.createElementNS(SVG_NS, 'tspan');
+                        tspan.textContent = char;
+                        tspan.setAttribute('x', centerX); tspan.setAttribute('y', centerY);
+                        textEl.appendChild(tspan);
+                        
+                        currentCharIdx++;
+                    }
+                    segGroup.appendChild(textEl);
+                }
+                group.appendChild(segGroup);
+            }
+
+        } else if (data.type === 'heading') {
+            group.setAttribute('transform', `translate(${data.x}, ${data.y})`);
+            
+            const gap = (STATE.grid.computed.lineGap && STATE.grid.computed.lineGap > 0) ? STATE.grid.computed.lineGap : 5;
+            const shadowRect = document.createElementNS(SVG_NS, 'rect');
+            shadowRect.setAttribute('x', -gap);
+            shadowRect.setAttribute('y', 0);
+            shadowRect.setAttribute('width', data.width + gap * 2);
+            shadowRect.setAttribute('height', data.height);
+            shadowRect.setAttribute('class', 'paper-fill');
+            group.appendChild(shadowRect);
+
+            const bgRect = document.createElementNS(SVG_NS, 'rect');
+            bgRect.setAttribute('x', 0); bgRect.setAttribute('y', 0);
+            bgRect.setAttribute('width', data.width); bgRect.setAttribute('height', data.height);
+            if (data.inverted) bgRect.setAttribute('class', 'ink-fill'); 
+            else bgRect.setAttribute('class', 'paper-fill');
+            group.appendChild(bgRect);
+
+            const hitRect = document.createElementNS(SVG_NS, 'rect');
+            hitRect.setAttribute('class', 'hit-rect');
+            hitRect.setAttribute('width', data.width); hitRect.setAttribute('height', data.height);
+            group.appendChild(hitRect);
+
+            const isVertical = data.height > data.width;
+            const cacheKey = getHeadingCacheKey(data);
             
             const textEl = document.createElementNS(SVG_NS, 'text');
+            textEl.textContent = data.text;
             textEl.setAttribute('font-family', data.fontFamily);
-            textEl.setAttribute('font-size', drawFontSize);
-            textEl.setAttribute('writing-mode', data.writingMode);
-            textEl.setAttribute('dominant-baseline', 'central'); 
-            textEl.setAttribute('text-anchor', 'middle');
-            textEl.setAttribute('class', 'ink-fill'); 
-            textEl.style.fontFamily = data.fontFamily;
-            textEl.style.pointerEvents = 'none'; 
+            textEl.setAttribute('font-weight', '900'); 
+            textEl.setAttribute('font-size', '100px');
             
-            const lines = data.text.split('\n');
-            lines.forEach((lineText, i) => {
-                const chars = lineText.split('');
-                chars.forEach((char, j) => {
-                    const tspan = document.createElementNS(SVG_NS, 'tspan');
-                    tspan.textContent = char;
-                    const centerX = effW - (drawFontSize / 2) - (i * drawPitchX);
-                    const centerY = (j * drawFontSize) + (drawFontSize / 2);
-                    tspan.setAttribute('x', centerX); tspan.setAttribute('y', centerY);
-                    textEl.appendChild(tspan);
-                });
-            });
-            group.appendChild(textEl);
-             if (data.showGrid) {
-                const gridGroup = document.createElementNS(SVG_NS, 'g');
-                gridGroup.style.pointerEvents = 'none';
-                // Grid logic same as before...
-                group.prepend(gridGroup);
+            if (data.inverted) textEl.setAttribute('class', 'paper-fill');
+            else textEl.setAttribute('class', 'ink-fill');
+
+            textEl.setAttribute('dominant-baseline', 'central');
+            textEl.setAttribute('text-anchor', 'middle');
+            textEl.setAttribute('x', '0'); textEl.setAttribute('y', '0');
+            textEl.setAttribute('writing-mode', isVertical ? 'vertical-rl' : 'horizontal-tb');
+            
+            if (data._metrics && data._metrics.key === cacheKey) {
+                group.appendChild(textEl);
+                applyHeadingTransform(textEl, data, data._metrics.ink);
+            } else {
+                textEl.setAttribute('opacity', '0'); 
+                group.appendChild(textEl);
+                
+                if (!data._pendingMeasurement || data._pendingMeasurement !== cacheKey) {
+                    data._pendingMeasurement = cacheKey;
+                    measureHeadingInk(data, cacheKey, isVertical);
+                }
             }
+
+        } else if (data.type === 'masthead') {
+            // Masthead Rendering
+            group.setAttribute('transform', `translate(${data.x}, ${data.y})`);
+            
+            const bo = parseFloat(data.borderWidthOuter) * PX_PER_MM;
+            const gap = bo; // UPDATED: Gap equals outer border width
+            const bi = parseFloat(data.borderWidthInner) * PX_PER_MM;
+            const pl = parseFloat(data.patternLineHeight) * PX_PER_MM;
+            
+            // 1. Background (White)
+            const bg = document.createElementNS(SVG_NS, 'rect');
+            bg.setAttribute('width', data.width); bg.setAttribute('height', data.height);
+            bg.setAttribute('class', 'paper-fill');
+            group.appendChild(bg);
+
+            // 2. Outer Border (Ink)
+            const outerRect = document.createElementNS(SVG_NS, 'rect');
+            const oOffset = bo / 2;
+            outerRect.setAttribute('x', oOffset); outerRect.setAttribute('y', oOffset);
+            outerRect.setAttribute('width', Math.max(0, data.width - bo));
+            outerRect.setAttribute('height', Math.max(0, data.height - bo));
+            outerRect.setAttribute('fill', 'none');
+            outerRect.setAttribute('class', 'ink-stroke');
+            outerRect.setAttribute('stroke-width', bo);
+            outerRect.setAttribute('stroke-linejoin', 'miter'); /* Changed to miter (sharp) */
+            group.appendChild(outerRect);
+
+            // 3. Inner Border (Ink)
+            const innerRect = document.createElementNS(SVG_NS, 'rect');
+            const iOffset = bo + gap + (bi / 2);
+            innerRect.setAttribute('x', iOffset); innerRect.setAttribute('y', iOffset);
+            innerRect.setAttribute('width', Math.max(0, data.width - iOffset * 2));
+            innerRect.setAttribute('height', Math.max(0, data.height - iOffset * 2));
+            innerRect.setAttribute('fill', 'none');
+            innerRect.setAttribute('class', 'ink-stroke');
+            innerRect.setAttribute('stroke-width', bi);
+            innerRect.setAttribute('stroke-linejoin', 'round'); // 角を丸く
+            group.appendChild(innerRect);
+
+            // 4. Pattern Fill (Inside Inner Border)
+            const patternId = 'pat-' + data.id;
+            const patternSize = pl * 4; // 間隔は線の太さの3倍（＝4倍ピッチ）くらいが丁度いい
+            
+            // Define Pattern if not exists (or recreate)
+            let defs = mainSvg.querySelector('defs');
+            let pattern = document.getElementById(patternId);
+            if (pattern) pattern.remove();
+            
+            pattern = document.createElementNS(SVG_NS, 'pattern');
+            pattern.setAttribute('id', patternId);
+            pattern.setAttribute('patternUnits', 'userSpaceOnUse');
+            pattern.setAttribute('width', patternSize); pattern.setAttribute('height', patternSize);
+            // 横線パターン
+            const line = document.createElementNS(SVG_NS, 'line');
+            line.setAttribute('x1', 0); line.setAttribute('y1', patternSize/2);
+            line.setAttribute('x2', patternSize); line.setAttribute('y2', patternSize/2);
+            line.setAttribute('class', 'ink-stroke');
+            line.setAttribute('stroke-width', pl);
+            pattern.appendChild(line);
+            defs.appendChild(pattern);
+
+            const patternRect = document.createElementNS(SVG_NS, 'rect');
+            const pOffset = bo + gap + bi; // 内枠のさらに内側
+            patternRect.setAttribute('x', pOffset); patternRect.setAttribute('y', pOffset);
+            patternRect.setAttribute('width', Math.max(0, data.width - pOffset * 2));
+            patternRect.setAttribute('height', Math.max(0, data.height - pOffset * 2));
+            patternRect.setAttribute('fill', `url(#${patternId})`);
+            group.appendChild(patternRect);
+
+            // 5. Text (Same logic as heading, but with stroke for readability over pattern)
+            const isVertical = data.height > data.width;
+            const cacheKey = getHeadingCacheKey(data);
+            
+            // Define ClipPath (Fix: Clip region should be static relative to the group)
+            const clipId = 'clip-' + data.id;
+            let clipPath = document.getElementById(clipId);
+            if (clipPath) clipPath.remove();
+
+            clipPath = document.createElementNS(SVG_NS, 'clipPath');
+            clipPath.setAttribute('id', clipId);
+            const clipRect = document.createElementNS(SVG_NS, 'rect');
+            clipRect.setAttribute('x', pOffset);
+            clipRect.setAttribute('y', pOffset);
+            clipRect.setAttribute('width', Math.max(0, data.width - pOffset * 2));
+            clipRect.setAttribute('height', Math.max(0, data.height - pOffset * 2));
+            clipPath.appendChild(clipRect);
+            defs.appendChild(clipPath);
+
+            // Container Group for Text (Applies ClipPath here to avoid transforming the clip region)
+            const textGroup = document.createElementNS(SVG_NS, 'g');
+            textGroup.setAttribute('clip-path', `url(#${clipId})`);
+
+            const textEl = document.createElementNS(SVG_NS, 'text');
+            textEl.textContent = data.text;
+            textEl.setAttribute('font-family', data.fontFamily);
+            textEl.setAttribute('font-weight', '900'); 
+            textEl.setAttribute('font-size', '100px');
+            
+            // 色反転ロジック
+            if (data.inverted) {
+                // 文字色＝紙、縁取り＝インク
+                textEl.setAttribute('class', 'paper-fill');
+                textEl.setAttribute('stroke', STATE.canvas.colors.ink);
+            } else {
+                // 文字色＝インク、縁取り＝紙
+                textEl.setAttribute('class', 'ink-fill');
+                textEl.setAttribute('stroke', STATE.canvas.colors.paper);
+            }
+
+            textEl.setAttribute('stroke-width', (data.textStrokeWidth || 4) + 'px'); 
+            textEl.setAttribute('stroke-linejoin', 'round'); // 文字の縁取りの角を丸く
+            textEl.setAttribute('stroke-linecap', 'round'); // 線の端を丸く
+            textEl.setAttribute('paint-order', 'stroke fill');
+
+            textEl.setAttribute('dominant-baseline', 'central');
+            textEl.setAttribute('text-anchor', 'middle');
+            textEl.setAttribute('x', '0'); textEl.setAttribute('y', '0');
+            textEl.setAttribute('writing-mode', isVertical ? 'vertical-rl' : 'horizontal-tb');
+
+            // Hit Rect
+            const hitRect = document.createElementNS(SVG_NS, 'rect');
+            hitRect.setAttribute('class', 'hit-rect');
+            hitRect.setAttribute('width', data.width); hitRect.setAttribute('height', data.height);
+            group.appendChild(hitRect);
+
+            if (data._metrics && data._metrics.key === cacheKey) {
+                textGroup.appendChild(textEl);
+                applyHeadingTransform(textEl, data, data._metrics.ink);
+                group.appendChild(textGroup);
+            } else {
+                textEl.setAttribute('opacity', '0'); 
+                textGroup.appendChild(textEl);
+                group.appendChild(textGroup);
+                if (!data._pendingMeasurement || data._pendingMeasurement !== cacheKey) {
+                    data._pendingMeasurement = cacheKey;
+                    measureHeadingInk(data, cacheKey, isVertical);
+                }
+            }
+
+        } else if (data.type === 'image') {
+            // 画像ボックス
+            group.setAttribute('transform', `translate(${data.x}, ${data.y})`);
+
+            // 行間幅を取得（ボックスシャドウ用）
+            const gap = (STATE.grid.computed.lineGap && STATE.grid.computed.lineGap > 0) ? STATE.grid.computed.lineGap : 5;
+
+            // 1. ボックスシャドウ（紙色の余白、左右のみ）
+            const shadowRect = document.createElementNS(SVG_NS, 'rect');
+            shadowRect.setAttribute('x', -gap);
+            shadowRect.setAttribute('y', 0);
+            shadowRect.setAttribute('width', data.width + gap * 2);
+            shadowRect.setAttribute('height', data.height);
+            shadowRect.setAttribute('class', 'paper-fill');
+            group.appendChild(shadowRect);
+
+            // 2. 画像表示領域（クリップパス用）
+            const clipId = `clip-${data.id}`;
+            const clipPath = document.createElementNS(SVG_NS, 'clipPath');
+            clipPath.setAttribute('id', clipId);
+            const clipRect = document.createElementNS(SVG_NS, 'rect');
+            clipRect.setAttribute('width', data.width);
+            clipRect.setAttribute('height', data.height);
+            clipPath.appendChild(clipRect);
+            group.appendChild(clipPath);
+
+            // 3. 画像（スケール + オフセット方式）
+            if (data.imageUrl) {
+                const imgGroup = document.createElementNS(SVG_NS, 'g');
+                imgGroup.setAttribute('clip-path', `url(#${clipId})`);
+                imgGroup.id = `img-content-${data.id}`; // ドラッグ可能にするためのID
+
+                const img = document.createElementNS(SVG_NS, 'image');
+                img.setAttributeNS('http://www.w3.org/1999/xlink', 'href', data.imageUrl);
+
+                // カバーフィット計算（基準サイズ）
+                if (data._imageAspect) {
+                    const boxAspect = data.width / data.height;
+                    const imgAspect = data._imageAspect;
+
+                    let baseW, baseH, baseX, baseY;
+                    if (imgAspect > boxAspect) {
+                        // 画像が横長 → 高さを合わせて幅を拡大
+                        baseH = data.height;
+                        baseW = baseH * imgAspect;
+                        baseX = (data.width - baseW) / 2;
+                        baseY = 0;
+                    } else {
+                        // 画像が縦長 → 幅を合わせて高さを拡大
+                        baseW = data.width;
+                        baseH = baseW / imgAspect;
+                        baseX = 0;
+                        baseY = (data.height - baseH) / 2;
+                    }
+
+                    // スケールとオフセットを適用
+                    const scale = data.imageScale || 1.0;
+                    const offsetX = data.imageOffsetX || 0;
+                    const offsetY = data.imageOffsetY || 0;
+
+                    const finalW = baseW * scale;
+                    const finalH = baseH * scale;
+                    const finalX = baseX + (baseW - finalW) / 2 + offsetX;
+                    const finalY = baseY + (baseH - finalH) / 2 + offsetY;
+
+                    img.setAttribute('x', finalX);
+                    img.setAttribute('y', finalY);
+                    img.setAttribute('width', finalW);
+                    img.setAttribute('height', finalH);
+                } else {
+                    // アスペクト比不明 → デフォルトでボックスサイズに合わせる
+                    img.setAttribute('width', data.width);
+                    img.setAttribute('height', data.height);
+                }
+
+                imgGroup.appendChild(img);
+                group.appendChild(imgGroup);
+            }
+
+            // 4. Hit Rect（操作用）
+            const hitRect = document.createElementNS(SVG_NS, 'rect');
+            hitRect.setAttribute('width', data.width);
+            hitRect.setAttribute('height', data.height);
+            hitRect.setAttribute('class', 'hit-rect');
+            group.appendChild(hitRect);
+
         } else {
+            // Rect (Fill)
+            group.setAttribute('transform', `translate(${data.x}, ${data.y})`);
             const rect = document.createElementNS(SVG_NS, 'rect');
-            rect.setAttribute('width', data.width); 
-            rect.setAttribute('height', data.height);
-            rect.setAttribute('fill', data.fill); 
-            rect.setAttribute('stroke', STATE.canvas.colors.ink); 
-            rect.setAttribute('class', 'ink-stroke');
-            rect.style.pointerEvents = 'none';
+            rect.setAttribute('width', data.width); rect.setAttribute('height', data.height);
+
+            if (data.fillMode === 'ink') {
+                 rect.setAttribute('class', 'ink-fill');
+            } else {
+                 rect.setAttribute('class', 'paper-fill');
+            }
+            rect.setAttribute('stroke', 'none');
+            // hit-rectの透明化を打ち消す
+            rect.style.fillOpacity = '1';
+            
+            // --- 枠線描画ロジック ---
+            const borderStyle = data.borderStyle || 'none';
+            const borderWidth = parseFloat(data.borderWidth || 0.5) * PX_PER_MM;
+            const isInkMode = (data.fillMode === 'ink');
+            
+            // 枠線用のグループ
+            const borderG = document.createElementNS(SVG_NS, 'g');
+            
+            if (borderStyle !== 'none') {
+                // 枠線の色
+                let strokeClass = isInkMode ? 'paper-stroke' : 'ink-stroke';
+                
+                // 1. デザイン上のオフセット (インクモード時の1mm内側配置)
+                let designOffset = isInkMode ? 1 * PX_PER_MM : 0;
+                
+                // 2. 線の太さの計算
+                // 二重線の場合は、線・間・線の3本分とみなして太さを3倍確保する
+                let totalStrokeWidth = (borderStyle === 'double') ? borderWidth * 3 : borderWidth;
+                
+                // 3. 描画位置の調整 (内側描画)
+                // SVGのstrokeはパスの中心に描画されるため、太さの半分(radius)だけ内側にずらす
+                // これにより、線の外端がボックスの端（あるいはdesignOffset位置）に揃う
+                let strokeRadius = totalStrokeWidth / 2;
+                let finalOffset = designOffset + strokeRadius;
+                
+                const borderRect = document.createElementNS(SVG_NS, 'rect');
+                borderRect.setAttribute('x', finalOffset);
+                borderRect.setAttribute('y', finalOffset);
+                // 幅・高さは、両側のオフセット分を引く
+                borderRect.setAttribute('width', Math.max(0, data.width - finalOffset * 2));
+                borderRect.setAttribute('height', Math.max(0, data.height - finalOffset * 2));
+                borderRect.setAttribute('fill', 'none');
+                borderRect.setAttribute('class', strokeClass);
+                borderRect.setAttribute('stroke-width', totalStrokeWidth);
+                
+                if (borderStyle === 'dotted') {
+                    borderRect.setAttribute('stroke-dasharray', `${totalStrokeWidth}, ${totalStrokeWidth}`);
+                }
+                
+                borderG.appendChild(borderRect);
+                
+                // 二重線 (Double) の場合
+                if (borderStyle === 'double') {
+                    // 下の線（太い）の上に、背景色の線（細い）を重ねて中抜きに見せる
+                    const innerRect = document.createElementNS(SVG_NS, 'rect');
+                    // 座標・サイズは下地と同じ（中心線が一致）
+                    innerRect.setAttribute('x', finalOffset);
+                    innerRect.setAttribute('y', finalOffset);
+                    innerRect.setAttribute('width', Math.max(0, data.width - finalOffset * 2));
+                    innerRect.setAttribute('height', Math.max(0, data.height - finalOffset * 2));
+                    innerRect.setAttribute('fill', 'none');
+                    // 抜き色は、背景色と同じにする（インクならインク、紙なら紙）
+                    innerRect.setAttribute('class', isInkMode ? 'ink-stroke' : 'paper-stroke');
+                    // 真ん中の1本分を抜く
+                    innerRect.setAttribute('stroke-width', borderWidth);
+                    
+                    borderG.appendChild(innerRect);
+                }
+            }
+            
             group.appendChild(rect);
+            group.appendChild(borderG);
+            
+            // Hit Rect (操作用、最前面)
+            const hitRect = document.createElementNS(SVG_NS, 'rect');
+            hitRect.setAttribute('width', data.width);
+            hitRect.setAttribute('height', data.height);
+            hitRect.setAttribute('class', 'hit-rect');
+            group.appendChild(hitRect);
         }
     }
 
-    function renderUi() {
-        renderMarginGuide();
-        const handles = layerUi.querySelectorAll('.selection-rect, .resize-handle');
-        handles.forEach(el => el.remove());
-
-        if (!STATE.selectedId) {
-            document.getElementById('prop-panel-none').style.display = 'block';
-            document.getElementById('prop-panel-text').style.display = 'none';
-            return;
+    // Transform適用ヘルパー
+    function applyHeadingTransform(textEl, data, ink) {
+        const pvPx = (data.paddingV || 0) * PX_PER_MM;
+        const phPx = (data.paddingH || 0) * PX_PER_MM;
+        // マストヘッドの場合はパディング＝枠線の合計幅として簡易計算するか、独自のマージンを持たせるか。
+        // ここでは見出しと同じロジックを使うため、paddingV/Hがないマストヘッドでは0になる。
+        // マストヘッドは枠の内側に文字を入れたいので、枠幅分をパディングとして考慮する。
+        let extraP = 0;
+        if (data.type === 'masthead') {
+            const bo = parseFloat(data.borderWidthOuter) * PX_PER_MM;
+            const gap = bo; // UPDATED: Gap equals outer border width (consistent with render)
+            const bi = parseFloat(data.borderWidthInner) * PX_PER_MM;
+            extraP = bo + gap + bi + (2 * PX_PER_MM); // 少し余裕を持たせる
         }
 
+        const contentW = Math.max(0, data.width - (phPx * 2) - (extraP * 2));
+        const contentH = Math.max(0, data.height - (pvPx * 2) - (extraP * 2));
+
+        if (ink.w <= 0 || ink.h <= 0 || contentW <= 0 || contentH <= 0) return;
+
+        const sx = contentW / ink.w;
+        const sy = contentH / ink.h;
+        // アスペクト比を維持するか？ 新聞題字は変形させることが多いので維持しない（見出しと同じ）
+        
+        const boxCenterX = (phPx || 0) + (extraP || 0) + contentW / 2;
+        const boxCenterY = (pvPx || 0) + (extraP || 0) + contentH / 2;
+        const inkCenterX = ink.x + ink.w / 2;
+        const inkCenterY = ink.y + ink.h / 2;
+
+        const transformStr = `translate(${boxCenterX}, ${boxCenterY}) scale(${sx}, ${sy}) translate(${-inkCenterX}, ${-inkCenterY})`;
+        textEl.setAttribute('transform', transformStr);
+    }
+
+    // 非同期計測ロジック
+    async function measureHeadingInk(data, cacheKey, isVertical) {
+        const measureSvg = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="-500 -500 1000 1000">
+                <style>
+                    .ink-fill { fill: #000; }
+                </style>
+                <text font-family='${data.fontFamily.replace(/['"]/g, "")}' font-weight="900" font-size="100" class="ink-fill" dominant-baseline="central" text-anchor="middle" x="0" y="0" writing-mode="${isVertical ? 'vertical-rl' : 'horizontal-tb'}">${data.text}</text>
+            </svg>`;
+            
+        const blob = new Blob([measureSvg], {type: 'image/svg+xml;charset=utf-8'});
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const size = 1000;
+            canvas.width = size; canvas.height = size;
+            const ctx = canvas.getContext('2d', {willReadFrequently: true});
+            ctx.drawImage(img, 0, 0);
+            
+            const pixels = ctx.getImageData(0, 0, size, size).data;
+            let minX = size, minY = size, maxX = 0, maxY = 0;
+            let found = false;
+
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    if (pixels[(y * size + x) * 4 + 3] > 20) {
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                        if (y < minY) minY = y;
+                        if (y > maxY) maxY = y;
+                        found = true;
+                    }
+                }
+            }
+            URL.revokeObjectURL(url);
+
+            if (found) {
+                const ink = {
+                    x: minX - 500,
+                    y: minY - 500,
+                    w: maxX - minX,
+                    h: maxY - minY
+                };
+                
+                const currentKey = getHeadingCacheKey(data);
+                if (currentKey === cacheKey) {
+                    data._metrics = { key: cacheKey, ink: ink };
+                    delete data._pendingMeasurement;
+                    renderElement(data); 
+                }
+            }
+        };
+        img.src = url;
+    }
+
+    // --- Border Rendering ---
+    function renderBorder() {
+        const layerBorder = document.getElementById('layer-border');
+        const layerDanLines = document.getElementById('layer-dan-lines');
+        if(!layerBorder) return;
+        layerBorder.innerHTML = '';
+        if(layerDanLines) layerDanLines.innerHTML = '';
+
+        const m = STATE.canvas.margin;
+        const w = STATE.canvas.width;
+        const h = STATE.canvas.height;
+        const offset = 3; // mm
+
+        // 版面サイズ
+        const contentX = m.left;
+        const contentY = m.top;
+        const contentW = w - m.left - m.right;
+        const contentH = h - m.top - m.bottom;
+
+        // 枠線座標 (版面から外側へ3mm)
+        const x = (contentX - offset) * PX_PER_MM;
+        const y = (contentY - offset) * PX_PER_MM;
+        const width = (contentW + offset * 2) * PX_PER_MM;
+        const height = (contentH + offset * 2) * PX_PER_MM;
+
+        const rect = document.createElementNS(SVG_NS, 'rect');
+        rect.setAttribute('x', x);
+        rect.setAttribute('y', y);
+        rect.setAttribute('width', width);
+        rect.setAttribute('height', height);
+        rect.setAttribute('fill', 'none');
+        rect.setAttribute('class', 'ink-stroke');
+        const strokeWidth = 0.4 * PX_PER_MM; // 枠線の太さ
+        rect.setAttribute('stroke-width', strokeWidth);
+        rect.setAttribute('stroke-linejoin', 'miter');
+        rect.setAttribute('pointer-events', 'none');
+
+        layerBorder.appendChild(rect);
+
+        // --- 追加: 段間罫線 (Separator Lines) ---
+        // 2段以上ある場合に、段と段の間の上下中央に線を引く
+        if (layerDanLines && STATE.grid.dan > 1 && STATE.grid.computed && STATE.grid.computed.danPitch) {
+            const danPitch = STATE.grid.computed.danPitch;
+            const danHeight = STATE.grid.computed.danHeight;
+            const mt = STATE.canvas.margin.top * PX_PER_MM;
+
+            // 隙間 (Gap) = ピッチ - 段の高さ
+            const gap = danPitch - danHeight;
+
+            // 線の描画範囲（版面の左右幅いっぱい）
+            const lineX1 = contentX * PX_PER_MM;
+            const lineX2 = (contentX + contentW) * PX_PER_MM;
+
+            for (let i = 0; i < STATE.grid.dan - 1; i++) {
+                // Y座標: 各段の下端 + ギャップの半分
+                // 段iのBottom = mt + (i * danPitch) + danHeight
+                const lineY = mt + (i * danPitch) + danHeight + (gap / 2);
+
+                const line = document.createElementNS(SVG_NS, 'line');
+                line.setAttribute('x1', lineX1);
+                line.setAttribute('y1', lineY);
+                line.setAttribute('x2', lineX2);
+                line.setAttribute('y2', lineY);
+                line.setAttribute('class', 'ink-stroke'); // インク色
+                line.setAttribute('stroke-width', strokeWidth); // 枠線と同じ太さ
+                line.setAttribute('pointer-events', 'none');
+                layerDanLines.appendChild(line);
+            }
+        }
+    }
+
+    // --- Character Count Info ---
+    function calculateMaxCapacity(data) {
+        // ボックス単体の最大容量を計算
+        const useSnapMode = data.snapMode !== undefined ? data.snapMode : STATE.articleSnapMode;
+        let segments;
+        if (useSnapMode) {
+            segments = getIntersectingDans(data);
+        } else {
+            segments = [{ height: data.height, localY: 0 }];
+        }
+
+        let totalCapacity = 0;
+        for (const seg of segments) {
+            const metrics = getLayoutMetrics(data, seg.height);
+            const { charsPerLine, maxLines } = metrics;
+            totalCapacity += charsPerLine * maxLines;
+        }
+        return totalCapacity;
+    }
+
+    function updateCharInfo(data) {
+        if (data.type !== 'text') return;
+
+        const charCurrentEl = document.getElementById('char-current');
+        const charCapacityEl = document.getElementById('char-capacity');
+        const charOverflowEl = document.getElementById('char-overflow');
+
+        // チェーンの先頭を探す
+        const head = findChainHead(data);
+        const fullText = head.text || "";
+        const currentCount = fullText.length;
+
+        // チェーン全体の最大容量を計算
+        let totalCapacity = 0;
+        let curr = head;
+        while (curr) {
+            totalCapacity += calculateMaxCapacity(curr);
+            curr = curr.next ? STATE.elements.find(el => el.id === curr.next) : null;
+        }
+
+        const overflow = Math.max(0, currentCount - totalCapacity);
+
+        charCurrentEl.textContent = currentCount;
+        charCapacityEl.textContent = totalCapacity;
+        charOverflowEl.textContent = overflow;
+
+        // あふれている場合は赤色で強調
+        if (overflow > 0) {
+            charOverflowEl.style.color = '#f44336';
+            charOverflowEl.style.fontWeight = 'bold';
+        } else {
+            charOverflowEl.style.color = '#666';
+            charOverflowEl.style.fontWeight = 'normal';
+        }
+    }
+
+    // --- UI/Updates ---
+    function renderUi() {
+        if (STATE.interactionType === 'resize' || STATE.interactionType === 'drag') {
+            if(STATE.selectedId) {
+                const data = STATE.elements.find(e => e.id === STATE.selectedId);
+                if(data) updateUiPositions(data);
+            }
+            return;
+        }
+        layerUi.innerHTML = ''; renderMarginGuide();
+        document.getElementById('prop-panel-none').style.display = 'none';
+        document.getElementById('prop-panel-text').style.display = 'none';
+        document.getElementById('prop-panel-heading').style.display = 'none';
+        document.getElementById('prop-panel-masthead').style.display = 'none';
+        document.getElementById('prop-panel-rect').style.display = 'none';
+        document.getElementById('prop-panel-image').style.display = 'none';
+
+        if (!STATE.selectedId) { document.getElementById('prop-panel-none').style.display = 'block'; return; }
         const data = STATE.elements.find(e => e.id === STATE.selectedId);
         if (!data) return;
 
-        document.getElementById('prop-panel-none').style.display = 'none';
         if (data.type === 'text') {
             document.getElementById('prop-panel-text').style.display = 'block';
-            if (document.activeElement.id !== 'inp-text') document.getElementById('inp-text').value = data.text;
-            const cGrid = STATE.grid.computed;
-            if(cGrid.charSizeW > 0) {
-                document.getElementById('inp-fontsize').value = Math.round(cGrid.charSizeW);
-                document.getElementById('inp-lineheight').value = (cGrid.pitchX / cGrid.charSizeW).toFixed(2);
+            
+            // Show/Hide inputs based on link state
+            const isChild = (data.prev !== undefined && data.prev !== null);
+            const infoEl = document.getElementById('text-link-info');
+            const txtArea = document.getElementById('inp-text');
+            
+            if (isChild) {
+                infoEl.style.display = 'block';
+                txtArea.disabled = true;
+                txtArea.value = "(リンク元のテキストを表示中)";
+            } else {
+                infoEl.style.display = 'none';
+                txtArea.disabled = false;
+                if (document.activeElement.id !== 'inp-text') txtArea.value = data.text;
             }
-        }
-        
-        if (STATE.interactionType === 'resize' || STATE.interactionType === 'drag') {
-            updateUiPositions(data);
-            return;
+            
+            document.getElementById('inp-fontfamily').value = data.fontFamily;
+            document.getElementById('inp-snap-article-txt').checked = data.snapMode !== undefined ? data.snapMode : STATE.articleSnapMode;
+
+            // 文字数情報を更新
+            updateCharInfo(data);
+        } else if (data.type === 'heading') {
+            document.getElementById('prop-panel-heading').style.display = 'block';
+            if (document.activeElement.id !== 'inp-heading-text') document.getElementById('inp-heading-text').value = data.text;
+            document.getElementById('inp-heading-font').value = data.fontFamily;
+            document.getElementById('inp-heading-pv').value = data.paddingV;
+            document.getElementById('inp-heading-pv-slider').value = data.paddingV;
+            document.getElementById('inp-heading-ph').value = data.paddingH;
+            document.getElementById('inp-heading-ph-slider').value = data.paddingH;
+            document.getElementById('inp-heading-inverted').checked = data.inverted || false;
+        } else if (data.type === 'masthead') {
+            document.getElementById('prop-panel-masthead').style.display = 'block';
+            if (document.activeElement.id !== 'inp-masthead-text') document.getElementById('inp-masthead-text').value = data.text;
+            document.getElementById('inp-masthead-font').value = data.fontFamily;
+            document.getElementById('inp-masthead-inverted').checked = data.inverted || false; /* Toggle State */
+            
+            document.getElementById('inp-masthead-bo').value = data.borderWidthOuter;
+            document.getElementById('inp-masthead-bo-slider').value = data.borderWidthOuter;
+            
+            document.getElementById('inp-masthead-bi').value = data.borderWidthInner;
+            document.getElementById('inp-masthead-bi-slider').value = data.borderWidthInner;
+            
+            document.getElementById('inp-masthead-pl').value = data.patternLineHeight;
+            document.getElementById('inp-masthead-pl-slider').value = data.patternLineHeight;
+            
+            document.getElementById('inp-masthead-ph').value = data.paddingH;
+            document.getElementById('inp-masthead-ph-slider').value = data.paddingH;
+            
+            document.getElementById('inp-masthead-pv').value = data.paddingV;
+            document.getElementById('inp-masthead-pv-slider').value = data.paddingV;
+            
+            document.getElementById('inp-masthead-ts').value = data.textStrokeWidth;
+            document.getElementById('inp-masthead-ts-slider').value = data.textStrokeWidth;
+        } else if (data.type === 'rect') {
+            document.getElementById('prop-panel-rect').style.display = 'block';
+            document.getElementById('inp-rect-ink').checked = (data.fillMode === 'ink');
+            document.getElementById('inp-rect-border-style').value = data.borderStyle || 'none';
+            document.getElementById('inp-rect-border-w').value = data.borderWidth || 0.5;
+            document.getElementById('inp-rect-border-w-slider').value = data.borderWidth || 0.5;
+        } else if (data.type === 'image') {
+            document.getElementById('prop-panel-image').style.display = 'block';
+
+            // 画像情報の表示
+            const infoEl = document.getElementById('image-info');
+            if (data.imageUrl) {
+                const widthPx = Math.ceil(data.width);
+                const heightPx = Math.ceil(data.height);
+                infoEl.textContent = `画像が設定されています (${widthPx}px×${heightPx}px)`;
+            } else {
+                infoEl.textContent = '画像を選択してください';
+            }
+
+            // トリミングモードの場合、画像操作UIを描画
+            if (STATE.cropMode && data.imageUrl && data._imageAspect) {
+                // 画像の実際の描画範囲を計算
+                const boxAspect = data.width / data.height;
+                const imgAspect = data._imageAspect;
+
+                let baseW, baseH, baseX, baseY;
+                if (imgAspect > boxAspect) {
+                    baseH = data.height;
+                    baseW = baseH * imgAspect;
+                    baseX = (data.width - baseW) / 2;
+                    baseY = 0;
+                } else {
+                    baseW = data.width;
+                    baseH = baseW / imgAspect;
+                    baseX = 0;
+                    baseY = (data.height - baseH) / 2;
+                }
+
+                const scale = data.imageScale || 1.0;
+                const offsetX = data.imageOffsetX || 0;
+                const offsetY = data.imageOffsetY || 0;
+
+                const imgW = baseW * scale;
+                const imgH = baseH * scale;
+                const imgX = data.x + baseX + (baseW - imgW) / 2 + offsetX;
+                const imgY = data.y + baseY + (baseH - imgH) / 2 + offsetY;
+
+                // ボックス枠（クリッピング領域）
+                const boxFrame = document.createElementNS(SVG_NS, 'rect');
+                boxFrame.setAttribute('x', data.x);
+                boxFrame.setAttribute('y', data.y);
+                boxFrame.setAttribute('width', data.width);
+                boxFrame.setAttribute('height', data.height);
+                boxFrame.setAttribute('fill', 'none');
+                boxFrame.setAttribute('stroke', '#00ff00');
+                boxFrame.setAttribute('stroke-width', '2');
+                boxFrame.setAttribute('stroke-dasharray', '5,5');
+                layerUi.appendChild(boxFrame);
+
+                // 画像枠（ドラッグ可能エリア）
+                const imgFrame = document.createElementNS(SVG_NS, 'rect');
+                imgFrame.setAttribute('x', imgX);
+                imgFrame.setAttribute('y', imgY);
+                imgFrame.setAttribute('width', imgW);
+                imgFrame.setAttribute('height', imgH);
+                imgFrame.setAttribute('fill', 'none');
+                imgFrame.setAttribute('stroke', '#ff00ff');
+                imgFrame.setAttribute('stroke-width', '2');
+                imgFrame.setAttribute('cursor', 'move');
+                imgFrame.classList.add('image-drag-area');
+                layerUi.appendChild(imgFrame);
+
+                // スケールハンドル（4隅）
+                const handleSize = 10;
+                const createScaleHandle = (x, y, corner) => {
+                    const handle = document.createElementNS(SVG_NS, 'rect');
+                    handle.setAttribute('x', x - handleSize/2);
+                    handle.setAttribute('y', y - handleSize/2);
+                    handle.setAttribute('width', handleSize);
+                    handle.setAttribute('height', handleSize);
+                    handle.setAttribute('fill', '#ff00ff');
+                    handle.setAttribute('stroke', 'white');
+                    handle.setAttribute('stroke-width', '1');
+                    handle.setAttribute('cursor', corner === 'nw' || corner === 'se' ? 'nwse-resize' : 'nesw-resize');
+                    handle.setAttribute('data-scale-corner', corner);
+                    handle.classList.add('image-scale-handle');
+                    layerUi.appendChild(handle);
+                };
+
+                createScaleHandle(imgX, imgY, 'nw');
+                createScaleHandle(imgX + imgW, imgY, 'ne');
+                createScaleHandle(imgX, imgY + imgH, 'sw');
+                createScaleHandle(imgX + imgW, imgY + imgH, 'se');
+
+                // トリミングモード中は通常のハンドルを表示しない
+                return;
+            }
         }
 
         const rect = document.createElementNS(SVG_NS, 'rect');
         rect.id = 'ui-selection-rect';
         rect.setAttribute('x', data.x - 2); rect.setAttribute('y', data.y - 2);
         rect.setAttribute('width', data.width + 4); rect.setAttribute('height', data.height + 4);
-        rect.setAttribute('class', 'selection-rect');
+
+        let selClass = 'selection-rect';
+        if (data.type === 'heading') selClass += ' heading-select';
+        if (data.type === 'masthead') selClass += ' masthead-select';
+        rect.setAttribute('class', selClass);
         layerUi.appendChild(rect);
-        createHandle(data.x, data.y, 'nw');
-        createHandle(data.x + data.width, data.y, 'ne');
-        createHandle(data.x, data.y + data.height, 'sw');
-        createHandle(data.x + data.width, data.y + data.height, 'se');
+
+        const isHeading = (data.type === 'heading');
+        const isMasthead = (data.type === 'masthead');
+        createHandle(data.x, data.y, 'nw', isHeading, isMasthead);
+        createHandle(data.x + data.width, data.y, 'ne', isHeading, isMasthead);
+        createHandle(data.x, data.y + data.height, 'sw', isHeading, isMasthead);
+        createHandle(data.x + data.width, data.y + data.height, 'se', isHeading, isMasthead);
+        
+        // Link Handle (Text Only)
+        if (data.type === 'text') {
+            createLinkHandle(data);
+        }
     }
     
+    function createLinkHandle(data) {
+        const size = 10;
+        const x = data.x + data.width / 2 - size / 2;
+        const y = data.y + data.height; // Bottom center
+        
+        const g = document.createElementNS(SVG_NS, 'g');
+        
+        const rect = document.createElementNS(SVG_NS, 'rect');
+        rect.setAttribute('x', x); rect.setAttribute('y', y);
+        rect.setAttribute('width', size); rect.setAttribute('height', size);
+        rect.setAttribute('class', 'link-handle-rect' + (data.next ? ' connected' : ''));
+        
+        const hit = document.createElementNS(SVG_NS, 'rect');
+        hit.setAttribute('x', x - 5); hit.setAttribute('y', y - 5);
+        hit.setAttribute('width', size + 10); hit.setAttribute('height', size + 10);
+        hit.setAttribute('class', 'link-handle-hit');
+        
+        g.appendChild(rect);
+        g.appendChild(hit);
+        layerUi.appendChild(g);
+    }
+
+    // 接続可能な候補を全て線枠表示する
+    function showLinkCandidates(sourceId) {
+        STATE.elements.forEach(el => {
+            // 自分自身は除外
+            if (el.id === sourceId) return;
+            // テキスト以外は除外
+            if (el.type !== 'text') return;
+            // 既に接続済み（next/prevがある）は除外
+            if (el.next || el.prev) return;
+            
+            const group = document.getElementById(el.id);
+            if (group) group.classList.add('link-candidate');
+        });
+    }
+
+    // 候補表示とハイライトをクリア
+    function clearLinkCandidates() {
+        document.querySelectorAll('.link-candidate').forEach(el => el.classList.remove('link-candidate'));
+        document.querySelectorAll('.highlight-target').forEach(el => el.classList.remove('highlight-target'));
+    }
+
+    function updateLinkHighlight(targetId) {
+        // 全てのハイライトを解除
+        const highlights = document.querySelectorAll('.highlight-target');
+        highlights.forEach(el => el.classList.remove('highlight-target'));
+        
+        if (targetId) {
+            const group = document.getElementById(targetId);
+            if (group) group.classList.add('highlight-target');
+        }
+    }
+
     function updateUiPositions(data) {
         const rect = document.getElementById('ui-selection-rect');
         if(rect) {
@@ -771,75 +2668,247 @@
             rect.setAttribute('width', data.width + 4); rect.setAttribute('height', data.height + 4);
         }
         const setPos = (sel, x, y) => {
-            const el = layerUi.querySelector(sel);
-            if(el) { el.setAttribute('cx', x); el.setAttribute('cy', y); }
+            const group = layerUi.querySelector(sel);
+            if(group) group.querySelectorAll('circle').forEach(c => { c.setAttribute('cx', x); c.setAttribute('cy', y); });
         };
-        setPos('.cursor-nw', data.x, data.y);
-        setPos('.cursor-ne', data.x + data.width, data.y);
-        setPos('.cursor-sw', data.x, data.y + data.height);
-        setPos('.cursor-se', data.x + data.width, data.y + data.height);
-    }
-
-    function createHandle(x, y, dir) {
-        const circle = document.createElementNS(SVG_NS, 'circle');
-        circle.setAttribute('cx', x); circle.setAttribute('cy', y);
-        circle.setAttribute('r', 15); 
-        circle.setAttribute('class', `resize-handle cursor-${dir}`);
-        layerUi.appendChild(circle);
-    }
-
-    // --- Helpers (Snap, Grid, etc. same as before) ---
-    function snapX(rawX, isLeftEdge) {
-        const cGrid = STATE.grid.computed;
-        if (cGrid.charSizeW <= 0) return rawX;
-        const mr = STATE.canvas.margin.right * PX_PER_MM;
-        const w_px = STATE.canvas.width * PX_PER_MM;
-        const rightEdge = w_px - mr;
-        const pitchX = cGrid.pitchX;
-        if (isLeftEdge) {
-            const col = Math.round((rightEdge - cGrid.charSizeW - rawX) / pitchX);
-            return rightEdge - (col * pitchX) - cGrid.charSizeW;
-        } else {
-            const col = Math.round((rightEdge - rawX) / pitchX);
-            return rightEdge - (col * pitchX);
+        setPos('.cursor-nw', data.x, data.y); setPos('.cursor-ne', data.x + data.width, data.y);
+        setPos('.cursor-sw', data.x, data.y + data.height); setPos('.cursor-se', data.x + data.width, data.y + data.height);
+        
+        // Update link handle pos if dragging
+        const linkHandle = layerUi.querySelector('.link-handle-rect');
+        const linkHit = layerUi.querySelector('.link-handle-hit');
+        if (linkHandle && linkHit) {
+            const size = 10;
+            const lx = data.x + data.width / 2 - size / 2;
+            const ly = data.y + data.height;
+            linkHandle.setAttribute('x', lx); linkHandle.setAttribute('y', ly);
+            linkHit.setAttribute('x', lx - 5); linkHit.setAttribute('y', ly - 5);
         }
     }
-    function snapY(rawY, isTopEdge) {
-        const cGrid = STATE.grid.computed;
-        if (cGrid.charSizeH <= 0) return rawY;
-        const mt = STATE.canvas.margin.top * PX_PER_MM;
-        const relY = rawY - mt;
-        const danIndex = Math.floor(relY / cGrid.danPitch);
-        const danStart = mt + (danIndex * cGrid.danPitch);
-        const relYInDan = rawY - danStart;
-        const charIndex = Math.round(relYInDan / cGrid.charSizeH);
-        return danStart + (charIndex * cGrid.charSizeH);
+
+    function createHandle(x, y, dir, isHeading, isMasthead) {
+        const group = document.createElementNS(SVG_NS, 'g');
+        let classes = `handle-group cursor-${dir}`;
+        if (isHeading) classes += ' heading-handle';
+        if (isMasthead) classes += ' masthead-handle';
+        
+        group.setAttribute('class', classes);
+        const hitArea = document.createElementNS(SVG_NS, 'circle');
+        hitArea.setAttribute('cx', x); hitArea.setAttribute('cy', y); hitArea.setAttribute('r', 30); 
+        hitArea.setAttribute('class', 'resize-handle-hit');
+        const visible = document.createElementNS(SVG_NS, 'circle');
+        visible.setAttribute('cx', x); visible.setAttribute('cy', y); visible.setAttribute('r', 6); 
+        visible.setAttribute('class', 'resize-handle-visual');
+        group.appendChild(visible); group.appendChild(hitArea); 
+        layerUi.appendChild(group);
     }
     
-    function getSvgPoint(clientX, clientY) {
-        const vpRect = viewport.getBoundingClientRect();
-        const vx = clientX - vpRect.left - STATE.view.x;
-        const vy = clientY - vpRect.top - STATE.view.y;
-        return { x: vx / STATE.view.scale, y: vy / STATE.view.scale };
+    function selectElement(id) { STATE.selectedId = id; renderUi(); }
+    function deleteSelected() { 
+        if (!STATE.selectedId) return; 
+        const id = STATE.selectedId;
+        // Handle Links
+        const data = STATE.elements.find(e => e.id === id);
+        if (data && data.type === 'text') {
+             // If I am a source, clear next's prev and reset next's content
+             if (data.next) {
+                 const next = STATE.elements.find(e => e.id === data.next);
+                 if(next) { 
+                     next.prev = null; 
+                     delete next._renderedText; 
+                     if (!next.text) next.text = "新規記事"; // デフォルトテキスト復帰
+                     renderElement(next); 
+                 }
+             }
+             // If I am a target, clear prev's next and re-flow prev chain
+             if (data.prev) {
+                 const prev = STATE.elements.find(e => e.id === data.prev);
+                 if(prev) { 
+                     prev.next = null; 
+                     // 親側のチェーン再計算（あふれ処理などの更新）
+                     const head = findChainHead(prev);
+                     updateTextChain(head);
+                 } 
+             }
+        }
+        
+        // Clean up definitions (pattern, clipPath)
+        const pattern = document.getElementById('pat-' + id);
+        if(pattern) pattern.remove();
+        const clip = document.getElementById('clip-' + id);
+        if(clip) clip.remove();
+
+        document.getElementById(id).remove(); 
+        STATE.elements = STATE.elements.filter(e => e.id !== id); 
+        STATE.selectedId = null; renderUi(); 
     }
     
-    // --- Other helpers ---
     function updateSelectedText() {
-        if (!STATE.selectedId) return;
-        const data = STATE.elements.find(el => el.id === STATE.selectedId);
-        data.text = document.getElementById('inp-text').value;
-        renderElement(data);
+        const data = STATE.elements.find(e => e.id === STATE.selectedId);
+        if(data && data.type === 'text') {
+            // Only update if I am not a child link
+            if (!data.prev) {
+                data.text = document.getElementById('inp-text').value;
+                // Render self, then update chain
+                updateTextChain(data);
+                // 文字数情報を更新
+                updateCharInfo(data);
+            }
+        }
     }
     function updateSelectedStyle() {
-        if (!STATE.selectedId) return;
-        const data = STATE.elements.find(el => el.id === STATE.selectedId);
-        data.fontFamily = document.getElementById('inp-fontfamily').value;
-        data.showGrid = document.getElementById('inp-showgrid').checked;
-        renderElement(data); renderUi();
+        const data = STATE.elements.find(e => e.id === STATE.selectedId);
+        if(data && data.type === 'text') {
+            data.fontFamily = document.getElementById('inp-fontfamily').value;
+            // Update chain
+            const head = findChainHead(data);
+            updateTextChain(head);
+            updateUiPositions(data);
+        }
     }
-    function createID() { return 'el_' + Math.random().toString(36).substr(2, 9); }
-    function selectElement(id) { STATE.selectedId = id; renderUi(); }
-    function deleteSelected() { if (!STATE.selectedId) return; document.getElementById(STATE.selectedId).remove(); STATE.elements = STATE.elements.filter(e => e.id !== STATE.selectedId); STATE.selectedId = null; renderUi(); }
+
+    function updateHeadingProp(key, subKey, val) {
+        const data = STATE.elements.find(e => e.id === STATE.selectedId);
+        if(!data || data.type !== 'heading') return;
+        
+        if (key === 'text') data.text = document.getElementById('inp-heading-text').value;
+        if (key === 'fontFamily') data.fontFamily = document.getElementById('inp-heading-font').value;
+        if (key === 'inverted') data.inverted = document.getElementById('inp-heading-inverted').checked;
+        
+        if (key === 'padding') {
+            const numVal = parseFloat(val);
+            if (subKey === 'h') {
+                data.paddingH = numVal;
+                document.getElementById('inp-heading-ph').value = numVal;
+                document.getElementById('inp-heading-ph-slider').value = numVal;
+            } else if (subKey === 'v') {
+                data.paddingV = numVal;
+                document.getElementById('inp-heading-pv').value = numVal;
+                document.getElementById('inp-heading-pv-slider').value = numVal;
+            }
+        }
+        renderElement(data);
+        if (key === 'text' || key === 'fontFamily' || key === 'padding') {
+            setTimeout(() => measureHeadingInk(data, getHeadingCacheKey(data), data.height > data.width), 10);
+        }
+    }
+
+    function updateMastheadProp(key, val) {
+        const data = STATE.elements.find(e => e.id === STATE.selectedId);
+        if(!data || data.type !== 'masthead') return;
+        
+        if (key === 'text') data.text = document.getElementById('inp-masthead-text').value;
+        if (key === 'fontFamily') data.fontFamily = document.getElementById('inp-masthead-font').value;
+        if (key === 'inverted') data.inverted = document.getElementById('inp-masthead-inverted').checked;
+
+        if (key === 'borderWidthOuter') {
+            data.borderWidthOuter = val;
+            document.getElementById('inp-masthead-bo').value = val;
+            document.getElementById('inp-masthead-bo-slider').value = val;
+        }
+        if (key === 'borderWidthInner') {
+            data.borderWidthInner = val;
+            document.getElementById('inp-masthead-bi').value = val;
+            document.getElementById('inp-masthead-bi-slider').value = val;
+        }
+        if (key === 'patternLineHeight') {
+            data.patternLineHeight = val;
+            document.getElementById('inp-masthead-pl').value = val;
+            document.getElementById('inp-masthead-pl-slider').value = val;
+        }
+        
+        if (key === 'paddingH') {
+            data.paddingH = val;
+            document.getElementById('inp-masthead-ph').value = val;
+            document.getElementById('inp-masthead-ph-slider').value = val;
+        }
+        if (key === 'paddingV') {
+            data.paddingV = val;
+            document.getElementById('inp-masthead-pv').value = val;
+            document.getElementById('inp-masthead-pv-slider').value = val;
+        }
+        if (key === 'textStrokeWidth') {
+            data.textStrokeWidth = val;
+            document.getElementById('inp-masthead-ts').value = val;
+            document.getElementById('inp-masthead-ts-slider').value = val;
+        }
+        
+        renderElement(data);
+        if (key === 'text' || key === 'fontFamily' || key.includes('border') || key.includes('pattern') || key.includes('padding') || key === 'textStrokeWidth' || key === 'inverted') {
+            setTimeout(() => measureHeadingInk(data, getHeadingCacheKey(data), data.height > data.width), 10);
+        }
+    }
+
+    function updateRectProp(key, val) {
+        const data = STATE.elements.find(e => e.id === STATE.selectedId);
+        if(!data || data.type !== 'rect') return;
+        
+        const isInk = document.getElementById('inp-rect-ink').checked;
+        data.fillMode = isInk ? 'ink' : 'paper';
+        
+        data.borderStyle = document.getElementById('inp-rect-border-style').value;
+        
+        if (key === 'width') {
+            const w = parseFloat(val);
+            data.borderWidth = w;
+            document.getElementById('inp-rect-border-w').value = w;
+            document.getElementById('inp-rect-border-w-slider').value = w;
+        }
+        
+        renderElement(data);
+    }
+
+    function toggleCropMode() {
+        STATE.cropMode = !STATE.cropMode;
+        const btn = document.getElementById('btn-crop-mode');
+        if (STATE.cropMode) {
+            btn.textContent = 'トリミング完了';
+            btn.style.backgroundColor = '#4CAF50';
+        } else {
+            btn.textContent = 'トリミング調整';
+            btn.style.backgroundColor = '';
+        }
+        renderUi();
+    }
+
+    function updateImageCrop(side, val) {
+        const data = STATE.elements.find(e => e.id === STATE.selectedId);
+        if(!data || data.type !== 'image') return;
+
+        const v = parseFloat(val);
+
+        if (side === 'top') {
+            data.cropTop = v;
+            document.getElementById('inp-crop-top').value = v;
+            document.getElementById('inp-crop-top-slider').value = v;
+        } else if (side === 'right') {
+            data.cropRight = v;
+            document.getElementById('inp-crop-right').value = v;
+            document.getElementById('inp-crop-right-slider').value = v;
+        } else if (side === 'bottom') {
+            data.cropBottom = v;
+            document.getElementById('inp-crop-bottom').value = v;
+            document.getElementById('inp-crop-bottom-slider').value = v;
+        } else if (side === 'left') {
+            data.cropLeft = v;
+            document.getElementById('inp-crop-left').value = v;
+            document.getElementById('inp-crop-left-slider').value = v;
+        }
+
+        renderElement(data);
+    }
+
+    function loadImageFile(input) {
+        const data = STATE.elements.find(e => e.id === STATE.selectedId);
+        if(!data || data.type !== 'image') return;
+
+        const file = input.files[0];
+        if (!file) return;
+
+        loadImageToElement(file, data);
+    }
+
+    // --- Export & Utils ---
     function fitView() {
         const vw = viewport.clientWidth; const vh = viewport.clientHeight;
         const w_px = STATE.canvas.width * PX_PER_MM; const h_px = STATE.canvas.height * PX_PER_MM;
@@ -850,27 +2919,21 @@
         updateTransform();
     }
     function updateTransform() { canvasContainer.style.transform = `translate(${STATE.view.x}px, ${STATE.view.y}px) scale(${STATE.view.scale})`; }
+    
     function updateCanvasSize() {
         const w = parseFloat(document.getElementById('inp-canvas-w').value);
         const h = parseFloat(document.getElementById('inp-canvas-h').value);
         STATE.canvas.width = w; STATE.canvas.height = h;
         mainSvg.setAttribute('width', w * PX_PER_MM); mainSvg.setAttribute('height', h * PX_PER_MM);
         mainSvg.setAttribute('viewBox', `0 0 ${w * PX_PER_MM} ${h * PX_PER_MM}`);
-        updateMargins();
-    }
-    function updateMargins() {
-        STATE.canvas.margin.top = parseFloat(document.getElementById('inp-margin-t').value);
-        STATE.canvas.margin.bottom = parseFloat(document.getElementById('inp-margin-b').value);
-        STATE.canvas.margin.left = parseFloat(document.getElementById('inp-margin-l').value);
-        STATE.canvas.margin.right = parseFloat(document.getElementById('inp-margin-r').value);
-        renderMarginGuide(); updateGridSettings();
+        updateGridSettings(); renderMarginGuide(); renderBorder();
     }
     function updateGridSettings() { 
         STATE.grid.show = document.getElementById('inp-layout-show').checked;
         STATE.grid.dan = parseInt(document.getElementById('inp-layout-dan').value);
         STATE.grid.charsPerDan = parseInt(document.getElementById('inp-layout-chars').value);
         STATE.grid.totalLines = parseInt(document.getElementById('inp-layout-lines').value);
-        renderPaperGrid(); syncAllTextElements();
+        renderPaperGrid(); 
     }
     function renderMarginGuide() {
         const old = document.getElementById('margin-guide-rect'); if(old) old.remove();
@@ -893,18 +2956,13 @@
         const w_px = STATE.canvas.width * PX_PER_MM; const h_px = STATE.canvas.height * PX_PER_MM;
         const validH = h_px - mt - STATE.canvas.margin.bottom * PX_PER_MM;
         const validW = w_px - STATE.canvas.margin.left * PX_PER_MM - STATE.canvas.margin.right * PX_PER_MM;
-        
         const totalHUnits = (STATE.grid.charsPerDan * STATE.grid.dan) + (STATE.grid.dan - 1);
         const unitH = validH / totalHUnits;
         const danPitch = (STATE.grid.charsPerDan * unitH) + unitH;
-        
         const fontSizeW = unitH / CHAR_SCALE_RATIO;
-        const totalCharW = fontSizeW * STATE.grid.totalLines;
-        let lineGap = 0; if(STATE.grid.totalLines > 1) lineGap = (validW - totalCharW) / (STATE.grid.totalLines - 1);
-        
-        STATE.grid.computed = { charSizeW: fontSizeW, charSizeH: unitH, lineGap, danHeight: unitH * STATE.grid.charsPerDan, danPitch, pitchX: fontSizeW + lineGap };
+        const pitchX = fontSizeW + (STATE.grid.totalLines > 1 ? (validW - fontSizeW * STATE.grid.totalLines) / (STATE.grid.totalLines - 1) : 0);
+        STATE.grid.computed = { charSizeW: fontSizeW, charSizeH: unitH, danHeight: unitH * STATE.grid.charsPerDan, danPitch, pitchX, lineGap: (pitchX - fontSizeW) };
         document.getElementById('grid-info').innerHTML = `文字サイズ: ${(fontSizeW / PX_PER_MM).toFixed(2)}mm`;
-
         const mr = STATE.canvas.margin.right * PX_PER_MM;
         for(let l=0; l<STATE.grid.totalLines; l++) {
             const lineX = (w_px - mr) - fontSizeW - (l * STATE.grid.computed.pitchX);
@@ -924,11 +2982,15 @@
         const paperC = document.getElementById('inp-paper-color').value;
         const inkC = document.getElementById('inp-ink-color').value;
         STATE.canvas.colors.paper = paperC; STATE.canvas.colors.ink = inkC;
-        paperBg.setAttribute('fill', paperC);
-        // Force SVG text content update logic in export (no live CSS var here for export safety)
+        svgStyle.textContent = `
+            .hit-rect { fill: #ffffff; fill-opacity: 0; pointer-events: all; }
+            .ink-fill { fill: ${inkC}; } .ink-stroke { stroke: ${inkC}; } 
+            .paper-fill { fill: ${paperC}; } .paper-stroke { stroke: ${paperC}; } 
+            text { fill: ${inkC}; }
+        `;
+        renderBorder();
     }
     
-    // Export (re-added)
     async function urlToBase64(url) {
         try { const res = await fetch(url); const blob = await res.blob();
             return new Promise(r => { const reader = new FileReader(); reader.onloadend = () => r(reader.result); reader.readAsDataURL(blob); });
@@ -948,66 +3010,133 @@
     async function exportCanvas() {
         const btn = document.getElementById('btn-export');
         const originalText = btn.textContent;
-        btn.textContent = "生成中..."; btn.disabled = true;
-        
-        // Hide UI layers and hit-rects
+        btn.textContent = "処理開始..."; btn.disabled = true;
         layerUi.style.display = 'none'; layerPaperGrid.style.display = 'none';
-        const hitStyle = document.createElementNS(SVG_NS, 'style');
-        hitStyle.textContent = '.hit-rect { display: none; }';
-        mainSvg.prepend(hitStyle);
-
         try {
+            const svgClone = mainSvg.cloneNode(true);
             const currentW = parseFloat(mainSvg.getAttribute('width'));
             const currentH = parseFloat(mainSvg.getAttribute('height'));
-            const svgClone = mainSvg.cloneNode(true);
+            const hitRects = svgClone.querySelectorAll('.hit-rect'); hitRects.forEach(el => el.remove());
+            const allElements = svgClone.querySelectorAll('[font-family]');
+            allElements.forEach(el => {
+                let ff = el.getAttribute('font-family');
+                if (ff) { ff = ff.replace(/['"]/g, '').split(',')[0].trim(); el.setAttribute('font-family', ff); el.style.fontFamily = ff; }
+            });
+            btn.textContent = "フォントDL中...";
             const fontCssUrl = 'https://fonts.googleapis.com/css2?family=BIZ+UDMincho&family=Noto+Sans+JP:wght@400;700;900&family=Noto+Serif+JP:wght@400;700;900&family=Yuji+Syuku&display=block';
             const embeddedCss = await getEmbeddableFontCss(fontCssUrl);
-            
-            // Reconstruct CSS for export based on STATE
-            const inkC = STATE.canvas.colors.ink;
-            const dynamicCss = `.ink-fill { fill: ${inkC}; } .ink-stroke { stroke: ${inkC}; } text { fill: ${inkC}; }`;
-            
-            const styleEl = document.createElementNS(SVG_NS, 'style');
-            styleEl.textContent = embeddedCss + '\n' + dynamicCss;
-            let defs = svgClone.querySelector('defs');
-            if(!defs) { defs = document.createElementNS(SVG_NS, 'defs'); svgClone.prepend(defs); }
+            btn.textContent = "画像生成中...";
+            const inkC = STATE.canvas.colors.ink; const paperC = STATE.canvas.colors.paper;
+            const dynamicCss = `.ink-fill { fill: ${inkC} !important; } .ink-stroke { stroke: ${inkC} !important; } .paper-fill { fill: ${paperC} !important; } .paper-stroke { stroke: ${paperC} !important; } text { fill: ${inkC} !important; }`;
+            const styleEl = document.createElementNS(SVG_NS, 'style'); styleEl.textContent = embeddedCss + '\n' + dynamicCss;
+            let defs = svgClone.querySelector('defs'); if(!defs) { defs = document.createElementNS(SVG_NS, 'defs'); svgClone.prepend(defs); }
             defs.appendChild(styleEl);
-            
             const svgData = new XMLSerializer().serializeToString(svgClone);
             const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const img = new Image();
             img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const scale = 4;
+                const canvas = document.createElement('canvas'); const scale = 4;
                 canvas.width = currentW * scale; canvas.height = currentH * scale;
-                const ctx = canvas.getContext('2d');
-                ctx.scale(scale, scale);
-                ctx.drawImage(img, 0, 0);
-                const a = document.createElement('a');
-                a.href = canvas.toDataURL('image/png');
-                a.download = 'newspaper.png';
-                a.click();
+                const ctx = canvas.getContext('2d'); ctx.scale(scale, scale); ctx.drawImage(img, 0, 0);
+                const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = 'newspaper.png'; a.click();
                 URL.revokeObjectURL(url);
-                hitStyle.remove();
                 layerUi.style.display = 'block'; layerPaperGrid.style.display = 'block';
                 btn.textContent = originalText; btn.disabled = false;
             };
             img.src = url;
         } catch(e) {
             console.error(e);
-            hitStyle.remove();
             layerUi.style.display = 'block'; layerPaperGrid.style.display = 'block';
             btn.textContent = originalText; btn.disabled = false;
         }
     }
+
     function setCanvasPreset(w, h) { document.getElementById('inp-canvas-w').value = w; document.getElementById('inp-canvas-h').value = h; updateCanvasSize(); fitView(); }
     function swapCanvasSize() { const w = document.getElementById('inp-canvas-w'); const h = document.getElementById('inp-canvas-h'); [w.value, h.value] = [h.value, w.value]; updateCanvasSize(); }
+    function getSvgPoint(clientX, clientY) {
+        const vpRect = viewport.getBoundingClientRect();
+        return { x: (clientX - vpRect.left - STATE.view.x) / STATE.view.scale, y: (clientY - vpRect.top - STATE.view.y) / STATE.view.scale };
+    }
+    
+    window.addEventListener('load', () => {
+        updateCanvasSize(); updateGridSettings(); updateColors(); fitView();
+        if (document.fonts) document.fonts.ready.then(() => { STATE.elements.forEach(renderElement); if(STATE.selectedId) renderUi(); });
+        setupImageDragAndDrop();
+    });
 
-    window.addEventListener('load', () => { updateCanvasSize(); updateGridSettings(); updateColors(); fitView(); });
+    // 画像ドラッグ&ドロップのセットアップ
+    function setupImageDragAndDrop() {
+        // SVGキャンバスへのドロップ
+        const canvasContainer = document.getElementById('canvas-container');
+        canvasContainer.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+        });
 
+        canvasContainer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (!file || !file.type.startsWith('image/')) return;
+
+            // マウス座標からSVG座標を取得
+            const rect = mainSvg.getBoundingClientRect();
+            const svgX = (e.clientX - rect.left) / STATE.view.scale;
+            const svgY = (e.clientY - rect.top) / STATE.view.scale;
+
+            // その位置にある画像ボックスを探す
+            let targetImage = null;
+            for (let i = STATE.elements.length - 1; i >= 0; i--) {
+                const el = STATE.elements[i];
+                if (el.type === 'image' &&
+                    svgX >= el.x && svgX <= el.x + el.width &&
+                    svgY >= el.y && svgY <= el.y + el.height) {
+                    targetImage = el;
+                    break;
+                }
+            }
+
+            if (targetImage) {
+                loadImageToElement(file, targetImage);
+            }
+        });
+
+        // プロパティパネルへのドロップ
+        const propPanel = document.getElementById('prop-panel-image');
+        propPanel.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+        });
+
+        propPanel.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (!file || !file.type.startsWith('image/')) return;
+
+            const data = STATE.elements.find(el => el.id === STATE.selectedId);
+            if (data && data.type === 'image') {
+                loadImageToElement(file, data);
+            }
+        });
+    }
+
+    // 画像ファイルを要素に読み込む共通関数
+    function loadImageToElement(file, data) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                data._imageAspect = img.width / img.height;
+                data.imageUrl = e.target.result;
+                renderElement(data);
+                if (STATE.selectedId === data.id) {
+                    renderUi();
+                }
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
 </script>
 </body>
 </html>
-
-
