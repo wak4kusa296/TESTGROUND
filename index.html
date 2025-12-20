@@ -3028,17 +3028,17 @@
             return cssText;
         } catch { return ''; }
     }
-    async function exportCanvas() {
+    async function exportCanvas(isRetry = false) {
         const btn = document.getElementById('btn-export');
         const originalText = btn.textContent;
         btn.textContent = "処理中..."; btn.disabled = true;
         layerUi.style.display = 'none'; layerPaperGrid.style.display = 'none';
-        
+
         try {
             // クローンを作成し、不要なUI要素を削除
             const svgClone = mainSvg.cloneNode(true);
             svgClone.querySelectorAll('.hit-rect, #margin-guide-rect').forEach(el => el.remove());
-            
+
             // font-family属性を簡素化（クォート削除）
             svgClone.querySelectorAll('[font-family]').forEach(el => {
                 let ff = el.getAttribute('font-family');
@@ -3056,10 +3056,10 @@
             const inkC = STATE.canvas.colors.ink;
             const paperC = STATE.canvas.colors.paper;
             const dynamicCss = `
-                .ink-fill { fill: ${inkC} !important; } 
-                .ink-stroke { stroke: ${inkC} !important; } 
-                .paper-fill { fill: ${paperC} !important; } 
-                .paper-stroke { stroke: ${paperC} !important; } 
+                .ink-fill { fill: ${inkC} !important; }
+                .ink-stroke { stroke: ${inkC} !important; }
+                .paper-fill { fill: ${paperC} !important; }
+                .paper-stroke { stroke: ${paperC} !important; }
                 text { fill: ${inkC} !important; }
             `;
             const dynamicStyleEl = document.createElementNS(SVG_NS, 'style');
@@ -3072,6 +3072,17 @@
 
             const img = new Image();
             img.onload = () => {
+                // 初回は書き出しをスキップして、2回目を自動実行
+                if (!isRetry) {
+                    URL.revokeObjectURL(url);
+                    // 少し待ってから2回目を実行
+                    setTimeout(() => {
+                        exportCanvas(true);
+                    }, 100);
+                    return;
+                }
+
+                // 2回目は実際に書き出し
                 const currentW = parseFloat(mainSvg.getAttribute('width'));
                 const currentH = parseFloat(mainSvg.getAttribute('height'));
                 const canvas = document.createElement('canvas');
@@ -3097,7 +3108,7 @@
                 console.error("Image loading for export failed.");
                 URL.revokeObjectURL(url);
                 btn.textContent = "エラー";
-                setTimeout(() => { 
+                setTimeout(() => {
                     btn.textContent = originalText;
                     btn.disabled = false;
                 }, 2000);
