@@ -233,6 +233,7 @@
     <!-- アイコンを「手」に変更 -->
     <button class="tool-btn active" id="btn-select" title="移動 (H)" onclick="setMode('select')">✋</button>
     <button class="tool-btn" id="btn-text" title="記事 (T)" onclick="setMode('text')">T<span class="tool-label">記事</span></button>
+    <button class="tool-btn" id="btn-freetext" title="自由テキスト (F)" onclick="setMode('freetext')">A<span class="tool-label">自由</span></button>
     <button class="tool-btn btn-heading" id="btn-heading" title="見出し (H)" onclick="setMode('heading')">H<span class="tool-label" style="font-weight:bold;">見出</span></button>
     <button class="tool-btn btn-masthead" id="btn-masthead" title="題字 (M)" onclick="setMode('masthead')">題<span class="tool-label">題字</span></button>
     <button class="tool-btn" id="btn-rect" title="塗りつぶし (R)" onclick="setMode('rect')">■<span class="tool-label">塗潰</span></button>
@@ -490,6 +491,68 @@
         <button class="btn-primary" id="btn-crop-mode" onclick="toggleCropMode()" style="margin-bottom: 10px;">トリミング調整</button>
         <div style="font-size:11px; color:#666; margin-bottom:10px;">
             ※ボタンを押すと画像上で直接ドラッグしてトリミングできます
+        </div>
+
+        <button class="btn-primary btn-delete" onclick="deleteSelected()">削除</button>
+    </div>
+
+    <div class="prop-group" id="prop-panel-freetext" style="display:none;">
+        <div class="prop-label">自由テキスト編集</div>
+        <textarea id="inp-freetext" class="prop-input" oninput="updateFreeTextProp('text')" style="min-height:80px; resize:vertical;"></textarea>
+
+        <div class="prop-label" style="margin-top:10px;">文字方向</div>
+        <div class="prop-row">
+            <label style="display:flex; align-items:center; font-size:12px; cursor:pointer; flex:1;">
+                <input type="radio" name="freetext-direction" value="vertical" onchange="updateFreeTextProp('direction')" style="margin-right:5px;"> 縦書き
+            </label>
+            <label style="display:flex; align-items:center; font-size:12px; cursor:pointer; flex:1;">
+                <input type="radio" name="freetext-direction" value="horizontal" onchange="updateFreeTextProp('direction')" style="margin-right:5px;"> 横書き
+            </label>
+        </div>
+
+        <div class="prop-label" style="margin-top:10px;">揃え位置</div>
+        <div class="prop-row" style="flex-wrap:wrap; gap:5px;">
+            <label style="display:flex; align-items:center; font-size:11px; cursor:pointer;">
+                <input type="radio" name="freetext-align" value="start-start" onchange="updateFreeTextProp('align')" style="margin-right:3px;"> 右上
+            </label>
+            <label style="display:flex; align-items:center; font-size:11px; cursor:pointer;">
+                <input type="radio" name="freetext-align" value="start-center" onchange="updateFreeTextProp('align')" style="margin-right:3px;"> 右中
+            </label>
+            <label style="display:flex; align-items:center; font-size:11px; cursor:pointer;">
+                <input type="radio" name="freetext-align" value="start-end" onchange="updateFreeTextProp('align')" style="margin-right:3px;"> 右下
+            </label>
+            <label style="display:flex; align-items:center; font-size:11px; cursor:pointer;">
+                <input type="radio" name="freetext-align" value="center-start" onchange="updateFreeTextProp('align')" style="margin-right:3px;"> 中上
+            </label>
+            <label style="display:flex; align-items:center; font-size:11px; cursor:pointer;">
+                <input type="radio" name="freetext-align" value="center-center" onchange="updateFreeTextProp('align')" style="margin-right:3px;"> 中央
+            </label>
+            <label style="display:flex; align-items:center; font-size:11px; cursor:pointer;">
+                <input type="radio" name="freetext-align" value="center-end" onchange="updateFreeTextProp('align')" style="margin-right:3px;"> 中下
+            </label>
+            <label style="display:flex; align-items:center; font-size:11px; cursor:pointer;">
+                <input type="radio" name="freetext-align" value="end-start" onchange="updateFreeTextProp('align')" style="margin-right:3px;"> 左上
+            </label>
+            <label style="display:flex; align-items:center; font-size:11px; cursor:pointer;">
+                <input type="radio" name="freetext-align" value="end-center" onchange="updateFreeTextProp('align')" style="margin-right:3px;"> 左中
+            </label>
+            <label style="display:flex; align-items:center; font-size:11px; cursor:pointer;">
+                <input type="radio" name="freetext-align" value="end-end" onchange="updateFreeTextProp('align')" style="margin-right:3px;"> 左下
+            </label>
+        </div>
+
+        <div class="prop-label" style="margin-top:10px;">フォント設定</div>
+        <select id="inp-freetext-font" class="prop-select" onchange="updateFreeTextProp('fontFamily')">
+            <option value='"BIZ UDMincho", serif'>BIZ UD明朝 (標準)</option>
+            <option value='"Noto Serif JP", serif'>Noto Serif JP</option>
+            <option value='"Noto Sans JP", sans-serif'>Noto Sans JP</option>
+            <option value='"Yuji Syuku", serif'>佑字 宿 (筆文字)</option>
+        </select>
+
+        <div class="prop-label" style="margin-top:10px;">文字サイズ (mm)</div>
+        <div class="prop-row">
+            <input type="range" id="inp-freetext-size-slider" min="2" max="50" step="0.5" value="12" oninput="updateFreeTextProp('fontSize')" style="flex:2;">
+            <input type="number" id="inp-freetext-size" class="prop-input" style="flex:0.8; margin-bottom:0;" value="12" onchange="updateFreeTextProp('fontSize')">
         </div>
 
         <button class="btn-primary btn-delete" onclick="deleteSelected()">削除</button>
@@ -1668,6 +1731,16 @@
                 imageOffsetX: 0, // 画像のX方向オフセット（px）
                 imageOffsetY: 0  // 画像のY方向オフセット（px）
             };
+        } else if (STATE.mode === 'freetext') {
+            // 自由テキストボックスを作成
+            data = {
+                id, type: 'freetext', x: rect.x, y: rect.y, width: rect.w, height: rect.h,
+                text: "自由テキスト",
+                direction: 'vertical', // 'vertical' or 'horizontal'
+                align: 'start-start', // 'start-start', 'start-center', 'start-end', etc.
+                fontFamily: '"BIZ UDMincho", serif',
+                fontSize: 12 // mm
+            };
         } else {
             // Rename to Fill: Create a filled rectangle using ink color
             // デフォルトは紙色, 枠線なし
@@ -2104,6 +2177,130 @@
             hitRect.setAttribute('class', 'hit-rect');
             group.appendChild(hitRect);
 
+        } else if (data.type === 'freetext') {
+            // 自由テキストボックス
+            group.setAttribute('transform', `translate(${data.x}, ${data.y})`);
+
+            const fontSize = (data.fontSize || 12) * PX_PER_MM;
+            const isVertical = data.direction === 'vertical';
+            const [alignX, alignY] = (data.align || 'start-start').split('-');
+
+            // テキストを折り返し処理
+            const lines = [];
+            const chars = data.text.split('');
+            let currentLine = [];
+
+            for (const char of chars) {
+                if (char === '\n') {
+                    lines.push(currentLine.join(''));
+                    currentLine = [];
+                    continue;
+                }
+
+                currentLine.push(char);
+
+                // 折り返し判定
+                if (isVertical) {
+                    // 縦書き: 文字高さで判定
+                    const currentHeight = currentLine.length * fontSize;
+                    if (currentHeight > data.height) {
+                        currentLine.pop();
+                        lines.push(currentLine.join(''));
+                        currentLine = [char];
+                    }
+                } else {
+                    // 横書き: SVGテキストで幅測定
+                    const tempText = document.createElementNS(SVG_NS, 'text');
+                    tempText.setAttribute('font-family', data.fontFamily);
+                    tempText.setAttribute('font-size', fontSize);
+                    tempText.textContent = currentLine.join('');
+                    group.appendChild(tempText);
+                    const textWidth = tempText.getBBox().width;
+                    group.removeChild(tempText);
+
+                    if (textWidth > data.width) {
+                        currentLine.pop();
+                        lines.push(currentLine.join(''));
+                        currentLine = [char];
+                    }
+                }
+            }
+            if (currentLine.length > 0) {
+                lines.push(currentLine.join(''));
+            }
+
+            // テキスト要素の作成
+            const textEl = document.createElementNS(SVG_NS, 'text');
+            textEl.setAttribute('font-family', data.fontFamily);
+            textEl.setAttribute('font-size', fontSize);
+            textEl.setAttribute('class', 'ink-fill');
+
+            if (isVertical) {
+                textEl.setAttribute('writing-mode', 'vertical-rl');
+                textEl.setAttribute('dominant-baseline', 'central');
+                textEl.setAttribute('text-anchor', 'middle');
+
+                // 揃え軸に応じた開始位置を計算
+                let startX;
+                if (alignX === 'start') startX = data.width - fontSize / 2;
+                else if (alignX === 'center') startX = data.width / 2 - (lines.length * fontSize - fontSize) / 2;
+                else startX = fontSize / 2 + (lines.length - 1) * fontSize;
+
+                lines.forEach((line, i) => {
+                    const tspan = document.createElementNS(SVG_NS, 'tspan');
+                    tspan.textContent = line;
+                    tspan.setAttribute('x', startX - i * fontSize);
+
+                    let y;
+                    const lineHeight = line.length * fontSize;
+                    if (alignY === 'start') y = lineHeight / 2;
+                    else if (alignY === 'center') y = data.height / 2 - lineHeight / 2 + lineHeight / 2;
+                    else y = data.height - lineHeight / 2;
+
+                    tspan.setAttribute('y', y);
+                    textEl.appendChild(tspan);
+                });
+
+            } else {
+                // 横書き
+                textEl.setAttribute('writing-mode', 'horizontal-tb');
+                textEl.setAttribute('dominant-baseline', 'text-before-edge');
+
+                let textAnchor;
+                if (alignX === 'start') textAnchor = 'start';
+                else if (alignX === 'center') textAnchor = 'middle';
+                else textAnchor = 'end';
+                textEl.setAttribute('text-anchor', textAnchor);
+
+                let startY;
+                if (alignY === 'start') startY = 0;
+                else if (alignY === 'center') startY = (data.height - lines.length * fontSize) / 2;
+                else startY = data.height - lines.length * fontSize;
+
+                lines.forEach((line, i) => {
+                    const tspan = document.createElementNS(SVG_NS, 'tspan');
+                    tspan.textContent = line;
+
+                    let x;
+                    if (alignX === 'start') x = 0;
+                    else if (alignX === 'center') x = data.width / 2;
+                    else x = data.width;
+
+                    tspan.setAttribute('x', x);
+                    tspan.setAttribute('y', startY + i * fontSize);
+                    textEl.appendChild(tspan);
+                });
+            }
+
+            group.appendChild(textEl);
+
+            // Hit Rect
+            const freeHitRect = document.createElementNS(SVG_NS, 'rect');
+            freeHitRect.setAttribute('width', data.width);
+            freeHitRect.setAttribute('height', data.height);
+            freeHitRect.setAttribute('class', 'hit-rect');
+            group.appendChild(freeHitRect);
+
         } else {
             // Rect (Fill)
             group.setAttribute('transform', `translate(${data.x}, ${data.y})`);
@@ -2183,11 +2380,11 @@
             group.appendChild(borderG);
             
             // Hit Rect (操作用、最前面)
-            const hitRect = document.createElementNS(SVG_NS, 'rect');
-            hitRect.setAttribute('width', data.width);
-            hitRect.setAttribute('height', data.height);
-            hitRect.setAttribute('class', 'hit-rect');
-            group.appendChild(hitRect);
+            const rectHitRect = document.createElementNS(SVG_NS, 'rect');
+            rectHitRect.setAttribute('width', data.width);
+            rectHitRect.setAttribute('height', data.height);
+            rectHitRect.setAttribute('class', 'hit-rect');
+            group.appendChild(rectHitRect);
         }
     }
 
@@ -2424,6 +2621,7 @@
         document.getElementById('prop-panel-masthead').style.display = 'none';
         document.getElementById('prop-panel-rect').style.display = 'none';
         document.getElementById('prop-panel-image').style.display = 'none';
+        document.getElementById('prop-panel-freetext').style.display = 'none';
 
         if (!STATE.selectedId) { document.getElementById('prop-panel-none').style.display = 'block'; return; }
         const data = STATE.elements.find(e => e.id === STATE.selectedId);
@@ -2580,6 +2778,24 @@
 
                 // トリミングモード中は通常のハンドルを表示しない
                 return;
+            }
+        } else if (data.type === 'freetext') {
+            document.getElementById('prop-panel-freetext').style.display = 'block';
+            if (document.activeElement.id !== 'inp-freetext') document.getElementById('inp-freetext').value = data.text;
+            document.getElementById('inp-freetext-font').value = data.fontFamily;
+            document.getElementById('inp-freetext-size').value = data.fontSize;
+            document.getElementById('inp-freetext-size-slider').value = data.fontSize;
+
+            // 文字方向の設定
+            const directionRadios = document.getElementsByName('freetext-direction');
+            for (const radio of directionRadios) {
+                radio.checked = (radio.value === data.direction);
+            }
+
+            // 揃え位置の設定
+            const alignRadios = document.getElementsByName('freetext-align');
+            for (const radio of alignRadios) {
+                radio.checked = (radio.value === data.align);
             }
         }
 
@@ -2842,19 +3058,53 @@
     function updateRectProp(key, val) {
         const data = STATE.elements.find(e => e.id === STATE.selectedId);
         if(!data || data.type !== 'rect') return;
-        
+
         const isInk = document.getElementById('inp-rect-ink').checked;
         data.fillMode = isInk ? 'ink' : 'paper';
-        
+
         data.borderStyle = document.getElementById('inp-rect-border-style').value;
-        
+
         if (key === 'width') {
             const w = parseFloat(val);
             data.borderWidth = w;
             document.getElementById('inp-rect-border-w').value = w;
             document.getElementById('inp-rect-border-w-slider').value = w;
         }
-        
+
+        renderElement(data);
+    }
+
+    function updateFreeTextProp(prop) {
+        const data = STATE.elements.find(e => e.id === STATE.selectedId);
+        if (!data || data.type !== 'freetext') return;
+
+        if (prop === 'text') {
+            data.text = document.getElementById('inp-freetext').value;
+        } else if (prop === 'direction') {
+            const directionRadios = document.getElementsByName('freetext-direction');
+            for (const radio of directionRadios) {
+                if (radio.checked) {
+                    data.direction = radio.value;
+                    break;
+                }
+            }
+        } else if (prop === 'align') {
+            const alignRadios = document.getElementsByName('freetext-align');
+            for (const radio of alignRadios) {
+                if (radio.checked) {
+                    data.align = radio.value;
+                    break;
+                }
+            }
+        } else if (prop === 'fontFamily') {
+            data.fontFamily = document.getElementById('inp-freetext-font').value;
+        } else if (prop === 'fontSize') {
+            const size = parseFloat(document.activeElement.value);
+            data.fontSize = size;
+            document.getElementById('inp-freetext-size').value = size;
+            document.getElementById('inp-freetext-size-slider').value = size;
+        }
+
         renderElement(data);
     }
 
@@ -3010,45 +3260,88 @@
     async function exportCanvas() {
         const btn = document.getElementById('btn-export');
         const originalText = btn.textContent;
-        btn.textContent = "処理開始..."; btn.disabled = true;
+        btn.textContent = "処理中..."; btn.disabled = true;
         layerUi.style.display = 'none'; layerPaperGrid.style.display = 'none';
+        
         try {
+            // クローンを作成し、不要なUI要素を削除
             const svgClone = mainSvg.cloneNode(true);
-            const currentW = parseFloat(mainSvg.getAttribute('width'));
-            const currentH = parseFloat(mainSvg.getAttribute('height'));
-            const hitRects = svgClone.querySelectorAll('.hit-rect'); hitRects.forEach(el => el.remove());
-            const allElements = svgClone.querySelectorAll('[font-family]');
-            allElements.forEach(el => {
+            svgClone.querySelectorAll('.hit-rect, #margin-guide-rect').forEach(el => el.remove());
+            
+            // font-family属性を簡素化（クォート削除）
+            svgClone.querySelectorAll('[font-family]').forEach(el => {
                 let ff = el.getAttribute('font-family');
-                if (ff) { ff = ff.replace(/['"]/g, '').split(',')[0].trim(); el.setAttribute('font-family', ff); el.style.fontFamily = ff; }
+                if (ff) {
+                    ff = ff.replace(/['"]/g, '').split(',')[0].trim();
+                    el.setAttribute('font-family', ff);
+                    // style属性もあれば更新
+                    if (el.style.fontFamily) {
+                        el.style.fontFamily = ff;
+                    }
+                }
             });
-            btn.textContent = "フォントDL中...";
-            const fontCssUrl = 'https://fonts.googleapis.com/css2?family=BIZ+UDMincho&family=Noto+Sans+JP:wght@400;700;900&family=Noto+Serif+JP:wght@400;700;900&family=Yuji+Syuku&display=block';
-            const embeddedCss = await getEmbeddableFontCss(fontCssUrl);
-            btn.textContent = "画像生成中...";
-            const inkC = STATE.canvas.colors.ink; const paperC = STATE.canvas.colors.paper;
-            const dynamicCss = `.ink-fill { fill: ${inkC} !important; } .ink-stroke { stroke: ${inkC} !important; } .paper-fill { fill: ${paperC} !important; } .paper-stroke { stroke: ${paperC} !important; } text { fill: ${inkC} !important; }`;
-            const styleEl = document.createElementNS(SVG_NS, 'style'); styleEl.textContent = embeddedCss + '\n' + dynamicCss;
-            let defs = svgClone.querySelector('defs'); if(!defs) { defs = document.createElementNS(SVG_NS, 'defs'); svgClone.prepend(defs); }
-            defs.appendChild(styleEl);
+
+            // 動的なスタイル（色など）をインラインで埋め込む
+            const inkC = STATE.canvas.colors.ink;
+            const paperC = STATE.canvas.colors.paper;
+            const dynamicCss = `
+                .ink-fill { fill: ${inkC} !important; } 
+                .ink-stroke { stroke: ${inkC} !important; } 
+                .paper-fill { fill: ${paperC} !important; } 
+                .paper-stroke { stroke: ${paperC} !important; } 
+                text { fill: ${inkC} !important; }
+            `;
+            const dynamicStyleEl = document.createElementNS(SVG_NS, 'style');
+            dynamicStyleEl.textContent = dynamicCss;
+            svgClone.querySelector('defs').appendChild(dynamicStyleEl);
+
             const svgData = new XMLSerializer().serializeToString(svgClone);
             const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
             const url = URL.createObjectURL(blob);
+
             const img = new Image();
             img.onload = () => {
-                const canvas = document.createElement('canvas'); const scale = 4;
-                canvas.width = currentW * scale; canvas.height = currentH * scale;
-                const ctx = canvas.getContext('2d'); ctx.scale(scale, scale); ctx.drawImage(img, 0, 0);
-                const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = 'newspaper.png'; a.click();
+                const currentW = parseFloat(mainSvg.getAttribute('width'));
+                const currentH = parseFloat(mainSvg.getAttribute('height'));
+                const canvas = document.createElement('canvas');
+                const scale = 4; // 高解像度化
+                canvas.width = currentW * scale;
+                canvas.height = currentH * scale;
+                const ctx = canvas.getContext('2d');
+                ctx.scale(scale, scale);
+                ctx.drawImage(img, 0, 0);
+
+                const a = document.createElement('a');
+                a.href = canvas.toDataURL('image/png');
+                a.download = 'newspaper.png';
+                a.click();
+
                 URL.revokeObjectURL(url);
-                layerUi.style.display = 'block'; layerPaperGrid.style.display = 'block';
-                btn.textContent = originalText; btn.disabled = false;
+                btn.textContent = originalText;
+                btn.disabled = false;
+                layerUi.style.display = 'block';
+                layerPaperGrid.style.display = 'block';
+            };
+            img.onerror = () => {
+                 // エラー処理
+                console.error("Image loading for export failed.");
+                URL.revokeObjectURL(url);
+                btn.textContent = "エラー";
+                setTimeout(() => { 
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }, 2000);
+                layerUi.style.display = 'block';
+                layerPaperGrid.style.display = 'block';
             };
             img.src = url;
-        } catch(e) {
-            console.error(e);
-            layerUi.style.display = 'block'; layerPaperGrid.style.display = 'block';
-            btn.textContent = originalText; btn.disabled = false;
+
+        } catch (e) {
+            console.error("Export failed:", e);
+            btn.textContent = originalText;
+            btn.disabled = false;
+            layerUi.style.display = 'block';
+            layerPaperGrid.style.display = 'block';
         }
     }
 
@@ -3059,9 +3352,34 @@
         return { x: (clientX - vpRect.left - STATE.view.x) / STATE.view.scale, y: (clientY - vpRect.top - STATE.view.y) / STATE.view.scale };
     }
     
-    window.addEventListener('load', () => {
-        updateCanvasSize(); updateGridSettings(); updateColors(); fitView();
-        if (document.fonts) document.fonts.ready.then(() => { STATE.elements.forEach(renderElement); if(STATE.selectedId) renderUi(); });
+    // --- 初期化処理 ---
+    window.addEventListener('load', async () => {
+        // 基本UIの初期化
+        updateCanvasSize(); 
+        updateGridSettings(); 
+        updateColors(); 
+        fitView();
+        
+        // フォントを非同期で取得し、SVGに埋め込む
+        try {
+            const fontCssUrl = 'https://fonts.googleapis.com/css2?family=BIZ+UDMincho&family=Noto+Sans+JP:wght@400;700;900&family=Noto+Serif+JP:wght@400;700;900&family=Yuji+Syuku&display=block';
+            const embeddedCss = await getEmbeddableFontCss(fontCssUrl);
+            
+            if (embeddedCss) {
+                // 既存のスタイルに追記する
+                svgStyle.textContent += '\n' + embeddedCss;
+            }
+        } catch(e) {
+            console.error("Failed to embed fonts:", e);
+        } finally {
+            // フォントの準備ができた後に要素をレンダリング
+            if (document.fonts) {
+                await document.fonts.ready;
+            }
+            STATE.elements.forEach(renderElement);
+            if(STATE.selectedId) renderUi();
+        }
+        
         setupImageDragAndDrop();
     });
 
