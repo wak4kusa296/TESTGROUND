@@ -1858,6 +1858,8 @@
                     textEl.setAttribute('text-anchor', 'middle');
                     textEl.setAttribute('class', 'ink-fill'); 
                     textEl.style.fontFamily = data.fontFamily;
+                    const isVerticalText = data.writingMode && data.writingMode.includes('vertical');
+                    applyTextOrientation(textEl, isVerticalText);
 
                     let currentLineIdx = 0;
                     let currentCharIdx = 0;
@@ -1938,6 +1940,8 @@
             textEl.setAttribute('text-anchor', 'middle');
             textEl.setAttribute('x', '0'); textEl.setAttribute('y', '0');
             textEl.setAttribute('writing-mode', isVertical ? 'vertical-rl' : 'horizontal-tb');
+            applyTextOrientation(textEl, isVertical);
+            applyTextOrientation(textEl, isVertical);
             
             if (data._metrics && data._metrics.key === cacheKey) {
                 group.appendChild(textEl);
@@ -2292,6 +2296,7 @@
                 });
             }
 
+            applyTextOrientation(textEl, isVertical);
             group.appendChild(textEl);
 
             // Hit Rect
@@ -2389,6 +2394,14 @@
     }
 
     // Transform適用ヘルパー
+    function applyTextOrientation(textEl, isVertical) {
+        const orientation = isVertical ? 'upright' : 'mixed';
+        textEl.setAttribute('text-orientation', orientation);
+        textEl.setAttribute('glyph-orientation-vertical', '0deg');
+        textEl.style.textOrientation = orientation;
+        textEl.style.webkitTextOrientation = orientation;
+    }
+
     function applyHeadingTransform(textEl, data, ink) {
         const pvPx = (data.paddingV || 0) * PX_PER_MM;
         const phPx = (data.paddingH || 0) * PX_PER_MM;
