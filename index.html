@@ -428,13 +428,13 @@
         <div class="prop-label">余白設定 (mm)</div>
         <div class="prop-row">
             <span style="font-size:11px; flex:0.8;">左右</span>
-            <input type="range" id="inp-masthead-ph-slider" class="masthead-slider" min="0" max="50" step="0.5" value="5" oninput="updateMastheadProp('paddingH', this.value)" style="flex:2;">
-            <input type="number" id="inp-masthead-ph" class="prop-input" style="flex:0.8; margin-bottom:0;" value="5" onchange="updateMastheadProp('paddingH', this.value)">
+            <input type="range" id="inp-masthead-ph-slider" class="masthead-slider" min="0" max="50" step="0.5" value="0" oninput="updateMastheadProp('paddingH', this.value)" style="flex:2;">
+            <input type="number" id="inp-masthead-ph" class="prop-input" style="flex:0.8; margin-bottom:0;" value="0" onchange="updateMastheadProp('paddingH', this.value)">
         </div>
         <div class="prop-row">
             <span style="font-size:11px; flex:0.8;">天地</span>
-            <input type="range" id="inp-masthead-pv-slider" class="masthead-slider" min="0" max="50" step="0.5" value="5" oninput="updateMastheadProp('paddingV', this.value)" style="flex:2;">
-            <input type="number" id="inp-masthead-pv" class="prop-input" style="flex:0.8; margin-bottom:0;" value="5" onchange="updateMastheadProp('paddingV', this.value)">
+            <input type="range" id="inp-masthead-pv-slider" class="masthead-slider" min="0" max="50" step="0.5" value="0" oninput="updateMastheadProp('paddingV', this.value)" style="flex:2;">
+            <input type="number" id="inp-masthead-pv" class="prop-input" style="flex:0.8; margin-bottom:0;" value="0" onchange="updateMastheadProp('paddingV', this.value)">
         </div>
 
         <div class="prop-label">フォント設定</div>
@@ -1623,9 +1623,9 @@
         } else if (STATE.mode === 'masthead') {
             data = {
                 id, type: 'masthead', x: rect.x, y: rect.y, width: rect.w, height: rect.h,
-                text: "新聞題字", fontFamily: '"Noto Serif JP", serif', 
+                text: "新聞題字", fontFamily: '"Noto Serif JP", serif',
                 borderWidthOuter: 1.0, borderWidthInner: 0.3, patternLineHeight: 0.4,
-                paddingH: 5, paddingV: 5, textStrokeWidth: 4, inverted: false
+                paddingH: 0, paddingV: 0, textStrokeWidth: 4, inverted: false
             };
         } else if (STATE.mode === 'image') {
             data = {
@@ -1833,13 +1833,17 @@
                     const centerX = cellX + cellWidth / 2;
                     const centerY = cellY + cellHeight / 2;
 
+                    // 15%上にずらす
+                    const verticalOffset = -baseFontSize * 0.075;
+                    const adjustedY = isVertical ? centerY : centerY + verticalOffset;
+
                     const textEl = document.createElementNS(SVG_NS, 'text');
                     textEl.textContent = glyphs[idx];
                     textEl.setAttribute('font-family', data.fontFamily);
                     textEl.setAttribute('font-weight', '900');
                     textEl.setAttribute('font-size', baseFontSize);
                     textEl.setAttribute('x', centerX);
-                    textEl.setAttribute('y', centerY);
+                    textEl.setAttribute('y', adjustedY);
                     textEl.setAttribute('dominant-baseline', 'central');
                     textEl.setAttribute('text-anchor', 'middle');
                     textEl.setAttribute('writing-mode', isVertical ? 'vertical-rl' : 'horizontal-tb');
@@ -1968,13 +1972,17 @@
                     const centerX = cellX + cellWidth / 2;
                     const centerY = cellY + cellHeight / 2;
 
+                    // 15%上にずらす
+                    const verticalOffset = -baseFontSize * 0.075;
+                    const adjustedY = isVertical ? centerY : centerY + verticalOffset;
+
                     const textEl = document.createElementNS(SVG_NS, 'text');
                     textEl.textContent = glyphs[idx];
                     textEl.setAttribute('font-family', data.fontFamily);
                     textEl.setAttribute('font-weight', '900');
                     textEl.setAttribute('font-size', baseFontSize);
                     textEl.setAttribute('x', centerX);
-                    textEl.setAttribute('y', centerY);
+                    textEl.setAttribute('y', adjustedY);
                     textEl.setAttribute('dominant-baseline', 'central');
                     textEl.setAttribute('text-anchor', 'middle');
                     textEl.setAttribute('writing-mode', isVertical ? 'vertical-rl' : 'horizontal-tb');
@@ -2161,7 +2169,7 @@
 
             } else {
                 textEl.setAttribute('writing-mode', 'horizontal-tb');
-                textEl.setAttribute('dominant-baseline', 'text-before-edge');
+                textEl.setAttribute('dominant-baseline', 'alphabetic');
 
                 let textAnchor;
                 if (alignX === 'start') textAnchor = 'start';
@@ -2169,10 +2177,29 @@
                 else textAnchor = 'end';
                 textEl.setAttribute('text-anchor', textAnchor);
 
+                // フォントメトリクスを取得するためのサンプルテキスト
+                const tempText = document.createElementNS(SVG_NS, 'text');
+                tempText.setAttribute('font-family', data.fontFamily);
+                tempText.setAttribute('font-size', fontSize);
+                tempText.setAttribute('dominant-baseline', 'alphabetic');
+                tempText.textContent = 'あ';
+                tempText.setAttribute('x', 0);
+                tempText.setAttribute('y', 0);
+                group.appendChild(tempText);
+                const bbox = tempText.getBBox();
+                group.removeChild(tempText);
+
+                // ベースラインからの実際の高さとオフセットを計算
+                const actualHeight = bbox.height;
+                const baselineOffset = -bbox.y; // ベースラインから上端までの距離
+
+                // 15%上にずらす
+                const verticalOffset = -fontSize * 0.075;
+
                 let startY;
-                if (alignY === 'start') startY = 0;
-                else if (alignY === 'center') startY = (data.height - lines.length * fontSize) / 2;
-                else startY = data.height - lines.length * fontSize;
+                if (alignY === 'start') startY = baselineOffset + verticalOffset;
+                else if (alignY === 'center') startY = (data.height - lines.length * fontSize) / 2 + baselineOffset + verticalOffset;
+                else startY = data.height - lines.length * fontSize + baselineOffset + verticalOffset;
 
                 lines.forEach((line, i) => {
                     const tspan = document.createElementNS(SVG_NS, 'tspan');
@@ -2265,7 +2292,7 @@
 
     // --- Heading Helpers ---
     function getHeadingContentBounds(data) {
-        // パディングを0に設定して、ブロックいっぱいにマス目を配置
+        // ボーダーとパディングを考慮した描画領域を計算
         let extraP = 0;
         if (data.type === 'masthead') {
             const bo = parseFloat(data.borderWidthOuter) * PX_PER_MM;
@@ -2273,11 +2300,20 @@
             const bi = parseFloat(data.borderWidthInner) * PX_PER_MM;
             extraP = bo + gap + bi + (2 * PX_PER_MM);
         }
-        const contentW = Math.max(0, data.width - (extraP * 2));
-        const contentH = Math.max(0, data.height - (extraP * 2));
+
+        // パディングを追加
+        const paddingH = parseFloat(data.paddingH || 0) * PX_PER_MM;
+        const paddingV = parseFloat(data.paddingV || 0) * PX_PER_MM;
+
+        const totalOffsetX = extraP + paddingH;
+        const totalOffsetY = extraP + paddingV;
+
+        const contentW = Math.max(0, data.width - (totalOffsetX * 2));
+        const contentH = Math.max(0, data.height - (totalOffsetY * 2));
+
         return {
-            offsetX: extraP,
-            offsetY: extraP,
+            offsetX: totalOffsetX,
+            offsetY: totalOffsetY,
             width: contentW,
             height: contentH
         };
