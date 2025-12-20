@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -342,11 +343,14 @@
 
         <div class="prop-label">フォント設定</div>
         <select id="inp-fontfamily" class="prop-select" onchange="updateSelectedStyle()">
-            <option value='"BIZ UDMincho", serif'>BIZ UD明朝 (標準)</option>
+            <option value='"BIZ UDMincho", serif'>BIZ UDMincho (BIZ UD明朝 標準)</option>
             <option value='"Noto Serif JP", serif'>Noto Serif JP</option>
             <option value='"Noto Sans JP", sans-serif'>Noto Sans JP</option>
-            <option value='"Yuji Syuku", serif'>佑字 宿 (筆文字)</option>
+            <option value='"Yuji Syuku", serif'>Yuji Syuku (佑字 宿 筆文字)</option>
         </select>
+        <div style="font-size:11px; color:#777; margin-bottom:10px;">
+            表示中のフォントは Google Fonts での正式名称 (BIZ UDMincho / Yuji Syuku) をそのまま記載しています。
+        </div>
         
         <div id="text-link-info" style="font-size:11px; color:#9c27b0; margin-bottom:10px; display:none;">
             ※このボックスはリンク接続されています。<br>文字は前のボックスから流し込まれます。
@@ -370,8 +374,8 @@
         <select id="inp-heading-font" class="prop-select" onchange="updateHeadingProp('fontFamily')">
             <option value='"Noto Sans JP", sans-serif'>Noto Sans JP (ゴシック)</option>
             <option value='"Noto Serif JP", serif'>Noto Serif JP (明朝)</option>
-            <option value='"BIZ UDMincho", serif'>BIZ UD明朝</option>
-            <option value='"Yuji Syuku", serif'>佑字 宿</option>
+            <option value='"BIZ UDMincho", serif'>BIZ UDMincho (BIZ UD明朝)</option>
+            <option value='"Yuji Syuku", serif'>Yuji Syuku (佑字 宿)</option>
         </select>
         <div class="prop-label">余白設定 (mm)</div>
         <div class="prop-row">
@@ -439,9 +443,9 @@
 
         <div class="prop-label">フォント設定</div>
         <select id="inp-masthead-font" class="prop-select" onchange="updateMastheadProp('fontFamily')">
-            <option value='"BIZ UDMincho", serif'>BIZ UD明朝 (標準)</option>
+            <option value='"BIZ UDMincho", serif'>BIZ UDMincho (BIZ UD明朝 標準)</option>
             <option value='"Noto Serif JP", serif'>Noto Serif JP (明朝)</option>
-            <option value='"Yuji Syuku", serif'>佑字 宿 (筆文字)</option>
+            <option value='"Yuji Syuku", serif'>Yuji Syuku (佑字 宿 筆文字)</option>
             <option value='"Noto Sans JP", sans-serif'>Noto Sans JP (ゴシック)</option>
         </select>
 
@@ -543,10 +547,10 @@
 
         <div class="prop-label" style="margin-top:10px;">フォント設定</div>
         <select id="inp-freetext-font" class="prop-select" onchange="updateFreeTextProp('fontFamily')">
-            <option value='"BIZ UDMincho", serif'>BIZ UD明朝 (標準)</option>
+            <option value='"BIZ UDMincho", serif'>BIZ UDMincho (BIZ UD明朝 標準)</option>
             <option value='"Noto Serif JP", serif'>Noto Serif JP</option>
             <option value='"Noto Sans JP", sans-serif'>Noto Sans JP</option>
-            <option value='"Yuji Syuku", serif'>佑字 宿 (筆文字)</option>
+            <option value='"Yuji Syuku", serif'>Yuji Syuku (佑字 宿 筆文字)</option>
         </select>
 
         <div class="prop-label" style="margin-top:10px;">文字サイズ (mm)</div>
