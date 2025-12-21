@@ -39,6 +39,9 @@
         /* 左サイドバー */
         .toolbar {
             width: 50px;
+            height: 100vh;
+            position: sticky;
+            top: 0;
             background: var(--panel-bg);
             border-right: 1px solid var(--border-col);
             display: flex;
@@ -523,6 +526,27 @@
         }
 
         .align-btn--active {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+
+        .color-toggle-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .color-toggle-btn {
+            flex: 1;
+            padding: 6px 0;
+            border: 1px solid var(--border-col);
+            background: #fff;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+
+        .color-toggle-btn.active {
             background: var(--primary);
             color: #fff;
             border-color: var(--primary);
@@ -1261,6 +1285,22 @@
                     oninput="updateFreeTextProp('fontSize')" style="flex:2;">
                 <input type="number" id="inp-freetext-size" class="prop-input" style="flex:0.8; margin-bottom:0;"
                     value="4" onchange="updateFreeTextProp('fontSize')">
+            </div>
+
+            <div class="prop-label" style="margin-top:10px;">太さ</div>
+            <div class="prop-row">
+                <input type="range" id="inp-freetext-weight-slider" min="200" max="900" step="100" value="400"
+                    oninput="updateFreeTextProp('fontWeight')" style="flex:2;">
+                <input type="number" id="inp-freetext-weight" class="prop-input" style="flex:0.8; margin-bottom:0;"
+                    value="400" min="200" max="900" step="100" onchange="updateFreeTextProp('fontWeight')">
+            </div>
+
+            <div class="prop-label" style="margin-top:10px;">文字色</div>
+            <div class="prop-row color-toggle-row">
+                <button type="button" class="color-toggle-btn" data-color-source="ink"
+                    onclick="updateFreeTextProp('colorSource', 'ink')">インク</button>
+                <button type="button" class="color-toggle-btn" data-color-source="paper"
+                    onclick="updateFreeTextProp('colorSource', 'paper')">紙色</button>
             </div>
 
             <button class="btn-primary btn-delete" onclick="deleteSelected()">削除</button>
@@ -3006,7 +3046,9 @@
                     direction: 'vertical',
                     align: 'top-left',
                     fontFamily: '"BIZ UDMincho", serif',
-                    fontSize: 4
+                    fontSize: 4,
+                    fontWeight: 400,
+                    colorSource: 'ink'
                 };
             } else if (STATE.mode === 'vline') {
                 data = {
@@ -3583,11 +3625,10 @@
                     borderRect.setAttribute('fill', 'none');
 
                     // 枠線の色
-                    if (isInkFill) {
-                        borderRect.setAttribute('stroke', '#ffffff');
-                    } else {
-                        borderRect.setAttribute('stroke', '#333333');
-                    }
+                    const inkColor = STATE.canvas.colors.ink || '#333333';
+                    const paperColor = STATE.canvas.colors.paper || '#ffffff';
+                    const borderStrokeColor = isInkFill ? paperColor : inkColor;
+                    borderRect.setAttribute('stroke', borderStrokeColor);
                     borderRect.setAttribute('stroke-width', borderWidth);
 
                     // 枠線のスタイル
@@ -3611,11 +3652,7 @@
                         innerRect.setAttribute('width', data.width - (innerInset * 2));
                         innerRect.setAttribute('height', data.height - (innerInset * 2));
                         innerRect.setAttribute('fill', 'none');
-                        if (isInkFill) {
-                            innerRect.setAttribute('stroke', '#ffffff');
-                        } else {
-                            innerRect.setAttribute('stroke', '#333333');
-                        }
+                        innerRect.setAttribute('stroke', borderStrokeColor);
                         innerRect.setAttribute('stroke-width', borderWidth);
                         group.appendChild(innerRect);
                     }
@@ -3697,7 +3734,12 @@
                 div.style.overflow = 'hidden';
                 div.style.fontFamily = data.fontFamily || '"BIZ UDMincho", serif';
                 div.style.fontSize = `${(data.fontSize || 4) * PX_PER_MM}px`;
-                div.style.color = STATE.canvas.colors.ink || '#333333';
+                const colorSource = data.colorSource === 'paper' ? 'paper' : 'ink';
+                const freetextColor = colorSource === 'paper'
+                    ? (STATE.canvas.colors.paper || '#ffffff')
+                    : (STATE.canvas.colors.ink || '#333333');
+                div.style.color = freetextColor;
+                div.style.fontWeight = (data.fontWeight !== undefined ? data.fontWeight : 400).toString();
 
                 const direction = data.direction || 'vertical';
                 const align = data.align || 'top-left';
@@ -4291,6 +4333,9 @@
 
                 updateFreetextAlignDirectionIndicators(data.direction);
                 updateFreetextAlignButtons(data);
+                document.getElementById('inp-freetext-weight').value = data.fontWeight || 400;
+                document.getElementById('inp-freetext-weight-slider').value = data.fontWeight || 400;
+                updateFreetextColorButtons(data);
             }
 
             const rect = document.createElementNS(SVG_NS, 'rect');
@@ -4589,7 +4634,7 @@
             renderElement(data);
         }
 
-        function updateFreeTextProp(prop) {
+        function updateFreeTextProp(prop, value) {
             const data = STATE.elements.find(e => e.id === STATE.selectedId);
             if (!data || data.type !== 'freetext') return;
 
@@ -4612,6 +4657,15 @@
                 data.fontSize = size;
                 document.getElementById('inp-freetext-size').value = size;
                 document.getElementById('inp-freetext-size-slider').value = size;
+            } else if (prop === 'fontWeight') {
+                const rawValue = value !== undefined ? value : document.activeElement.value;
+                const weight = parseInt(rawValue, 10) || 400;
+                data.fontWeight = weight;
+                document.getElementById('inp-freetext-weight').value = weight;
+                document.getElementById('inp-freetext-weight-slider').value = weight;
+            } else if (prop === 'colorSource') {
+                data.colorSource = value || 'ink';
+                updateFreetextColorButtons(data);
             }
 
             renderElement(data);
@@ -4636,6 +4690,14 @@
 
         function updateFreetextAlignDirectionIndicators(direction) {
             // 不要になったが互換性のため残す
+        }
+
+        function updateFreetextColorButtons(data) {
+            const activeSource = data?.colorSource || 'ink';
+            document.querySelectorAll('#prop-panel-freetext .color-toggle-btn').forEach(btn => {
+                const source = btn.dataset.colorSource;
+                btn.classList.toggle('active', source === activeSource);
+            });
         }
 
         function toggleCropMode() {
@@ -4824,16 +4886,12 @@
         `;
             renderBorder();
 
-            // 画像ボックスを再レンダリング
+            // 全要素を再描画（画像は必要ならインク処理も再実行）
             for (const data of STATE.elements) {
-                if (data.type === 'image') {
-                    // インクモード画像の再処理
-                    if (data.colorMode === 'ink' && data._originalImageUrl) {
-                        await applyImageColorMode(data);
-                    }
-                    // 画像未設定や色変更を反映するため再レンダリング
-                    renderElement(data);
+                if (data.type === 'image' && data.colorMode === 'ink' && data._originalImageUrl) {
+                    await applyImageColorMode(data);
                 }
+                renderElement(data);
             }
         }
 
