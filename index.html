@@ -5654,18 +5654,18 @@
             return isIpad || isIphone || isIpod;
         }
 
-        // iPadモードの切り替え
-        function toggleIpadMode() {
-            STATE.ipadMode = !STATE.ipadMode;
+        function setIpadMode(enabled) {
+            STATE.ipadMode = enabled;
             updateIpadModeIndicator();
-
-            // すべての要素を再描画
             STATE.elements.forEach(data => renderElement(data));
-
-            // 選択されている要素があればUI更新
             if (STATE.selectedId) {
                 renderUi();
             }
+        }
+
+        // iPadモードの切り替え
+        function toggleIpadMode() {
+            setIpadMode(!STATE.ipadMode);
         }
 
         // iPadモードインジケーターの更新
