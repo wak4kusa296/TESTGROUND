@@ -46,6 +46,17 @@
             align-items: center;
             padding: 0;
             z-index: 100;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .toolbar::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .toolbar::-webkit-scrollbar-thumb {
+            background: var(--border-col);
+            border-radius: 2px;
         }
 
         .tool-btn {
@@ -625,6 +636,50 @@
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
+
+        /* 右上の操作ボタングループ（ツールバーの右隣） */
+        .top-right-controls {
+            position: fixed;
+            top: 10px;
+            left: 70px; /* ツールバー(50px) + 余白(20px) */
+            display: flex;
+            gap: 8px;
+            z-index: 10000;
+        }
+
+        .control-btn {
+            padding: 8px 16px;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-col);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            user-select: none;
+        }
+
+        .control-btn:hover {
+            background: var(--ui-bg);
+        }
+
+        .control-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .control-btn.ipad-mode-active {
+            background: #4CAF50;
+            color: white;
+            border-color: #4CAF50;
+        }
+
+        .control-btn.ipad-mode-active:hover {
+            background: #45a049;
+        }
     </style>
 </head>
 
@@ -647,6 +702,13 @@
         </div>
     </div>
 
+    <!-- 右上の操作ボタングループ -->
+    <div class="top-right-controls">
+        <button class="control-btn" id="btn-undo" title="元に戻す (Ctrl+Z)" onclick="undo()">↶ 戻る</button>
+        <button class="control-btn" id="btn-redo" title="やり直す (Ctrl+Y)" onclick="redo()">↷ やり直す</button>
+        <button class="control-btn" id="btn-ipad-mode" title="iPad対応モード" onclick="toggleIpadMode()">📱 iPad対応</button>
+    </div>
+
     <div class="toolbar">
         <button class="tool-btn active" id="btn-select" title="選択 (V)" onclick="setMode('select')">▲<span
                 class="tool-label">選択</span></button>
@@ -667,6 +729,7 @@
         <button class="tool-btn" id="btn-image" title="画像 (I)" onclick="setMode('image')">🖼<span
                 class="tool-label">画像</span></button>
         <div style="flex:1"></div>
+        <button class="tool-btn" onclick="exportCanvas()" title="画像として書き出し">📤<span class="tool-label">書出</span></button>
         <button class="tool-btn" onclick="newProject()" title="新規作成">📄<span class="tool-label">新規</span></button>
         <button class="tool-btn" onclick="openProjectFile()" title="開く">📂<span class="tool-label">開く</span></button>
         <button class="tool-btn" onclick="saveProject()" title="保存">💾<span class="tool-label">保存</span></button>
@@ -1203,6 +1266,7 @@
         const STATE = {
             mode: 'select',
             articleSnapMode: true,
+            ipadMode: false, // iPad対応モード
             canvas: { width: 297, height: 420, margin: { top: 20, bottom: 20, left: 20, right: 20 }, colors: { paper: '#ffffff', ink: '#333333' } },
             grid: { show: true, dan: 6, charsPerDan: 11, totalLines: 25, computed: { charSizeW: 0, charSizeH: 0, lineGap: 0, danHeight: 0, danPitch: 0, pitchX: 0 } },
             view: { x: 0, y: 0, scale: 1.0 },
@@ -2588,23 +2652,55 @@
                 }
 
                 // ===== 通常文字（indent含む） =====
+                const char = token.char || '';
+
+                // iPadで回転してしまう文字（90度回転が必要）
+                const needsRotation = /[）\)］\]｝\}」』】〉》〕›»！？!?‼⁇⁈⁉ー－−‐‑‒–—―〜～・･゠…‥°′″℃￠¢%％‰（\(［\[｛\{「『【〈《〔‹«]/.test(char);
+
+                // 句読点（右上に移動が必要）
+                const isPunctuation = /[、。，．：；]/.test(char);
+
                 const t = document.createElementNS(SVG_NS, 'text');
-                t.textContent = token.char; // indent は '' のはず
-                t.setAttribute('x', columnCenterX);
-                t.setAttribute('y', drawY);
+                t.textContent = char;
                 t.setAttribute('font-family', data.fontFamily);
                 t.setAttribute('class', 'ink-fill');
-                t.setAttribute('writing-mode', data.writingMode || 'vertical-rl');
                 t.setAttribute('text-anchor', 'middle');
                 t.setAttribute('dominant-baseline', 'central');
                 t.setAttribute('font-size', fontSize);
 
-                // Safari/iOS対策: 句読点や特定の文字を縦書きで正しく表示
-                const char = token.char || '';
-                const needsRotation = /[、。，．・：；！？（）「」『』【】〈〉《》〔〕［］｛｝]/. test(char);
-                if (needsRotation && (data.writingMode === 'vertical-rl' || !data.writingMode)) {
-                    // text-orientationを追加してグリフの向きを制御
-                    t.style.textOrientation = 'upright';
+                // iPadモード対応
+                if (STATE.ipadMode && (data.writingMode === 'vertical-rl' || !data.writingMode)) {
+                    if (needsRotation) {
+                        // 回転している文字を時計回りに90度回転して修正
+                        t.setAttribute('writing-mode', 'horizontal-tb');
+                        t.setAttribute('transform', `rotate(90 ${columnCenterX} ${drawY})`);
+                        t.setAttribute('x', columnCenterX);
+                        t.setAttribute('y', drawY);
+                    } else if (isPunctuation) {
+                        // 句読点は回転していないが、右上95%に移動
+                        t.setAttribute('writing-mode', data.writingMode || 'vertical-rl');
+                        const offset = renderCharHeight * 0.475;
+                        t.setAttribute('x', columnCenterX + offset);
+                        t.setAttribute('y', drawY);
+                        t.style.textOrientation = 'upright';
+                    } else {
+                        // その他の文字は通常通り
+                        t.setAttribute('x', columnCenterX);
+                        t.setAttribute('y', drawY);
+                        t.setAttribute('writing-mode', data.writingMode || 'vertical-rl');
+                        t.style.textOrientation = 'upright';
+                    }
+                } else {
+                    // 通常モード
+                    t.setAttribute('x', columnCenterX);
+                    t.setAttribute('y', drawY);
+                    t.setAttribute('writing-mode', data.writingMode || 'vertical-rl');
+
+                    // Safari/iOS対策
+                    const allSpecialChars = /[、。，．・：；！？（）「」『』【】〈〉《》〔〕［］｛｝]/.test(char);
+                    if (allSpecialChars) {
+                        t.style.textOrientation = 'upright';
+                    }
                 }
 
                 segGroup.appendChild(t);
@@ -3148,18 +3244,48 @@
                         textEl.setAttribute('dominant-baseline', 'central');
                         textEl.setAttribute('text-anchor', 'middle');
 
-                        if (glyph.type === 'tcy' && isVertical) textEl.setAttribute('writing-mode', 'horizontal-tb');
-                        else textEl.setAttribute('writing-mode', isVertical ? 'vertical-rl' : 'horizontal-tb');
-
-                        // Safari/iOS対策: 句読点や特定の文字を縦書きで正しく表示
+                        // iPadモード対応
                         const char = glyph.text || '';
-                        const needsRotation = /[、。，．・：；！？（）「」『』【】〈〉《》〔〕［］｛｝]/.test(char);
-                        if (needsRotation && isVertical && glyph.type !== 'tcy') {
-                            textEl.style.textOrientation = 'upright';
-                        }
+                        // iPadで回転してしまう文字（90度回転が必要）
+                        const needsRotation = /[）\)］\]｝\}」』】〉》〕›»！？!?‼⁇⁈⁉ー－−‐‑‒–—―〜～・･゠…‥°′″℃￠¢%％‰（\(［\[｛\{「『【〈《〔‹«]/.test(char);
+                        // 句読点（右上に移動が必要）
+                        const isPunctuation = /[、。，．：；]/.test(char);
 
-                        textEl.setAttribute('transform', `scale(${scaleX}, ${scaleY})`);
-                        textEl.setAttribute('transform-origin', `${centerX} ${centerY}`);
+                        if (glyph.type === 'tcy' && isVertical) {
+                            textEl.setAttribute('writing-mode', 'horizontal-tb');
+                        } else if (STATE.ipadMode && isVertical) {
+                            if (needsRotation) {
+                                // iPadモード: 回転している文字を90度回転で修正
+                                textEl.setAttribute('writing-mode', 'horizontal-tb');
+                                textEl.setAttribute('x', centerX);
+                                textEl.setAttribute('y', adjustedY);
+                                textEl.setAttribute('transform', `rotate(90 ${centerX} ${adjustedY}) scale(${scaleX}, ${scaleY})`);
+                                textEl.setAttribute('transform-origin', `${centerX} ${adjustedY}`);
+                            } else if (isPunctuation) {
+                                // 句読点は回転していないが右上95%に移動
+                                textEl.setAttribute('writing-mode', 'vertical-rl');
+                                const offset = baseFontSize * 0.475 * scaleX;
+                                const finalX = centerX + offset;
+                                textEl.setAttribute('x', finalX);
+                                textEl.setAttribute('y', adjustedY);
+                                textEl.style.textOrientation = 'upright';
+                                textEl.setAttribute('transform', `scale(${scaleX}, ${scaleY})`);
+                                textEl.setAttribute('transform-origin', `${centerX} ${centerY}`);
+                            } else {
+                                // その他の文字は通常通り
+                                textEl.setAttribute('writing-mode', 'vertical-rl');
+                                textEl.style.textOrientation = 'upright';
+                                textEl.setAttribute('transform', `scale(${scaleX}, ${scaleY})`);
+                                textEl.setAttribute('transform-origin', `${centerX} ${centerY}`);
+                            }
+                        } else {
+                            textEl.setAttribute('writing-mode', isVertical ? 'vertical-rl' : 'horizontal-tb');
+                            if (needsRotation && isVertical && glyph.type !== 'tcy') {
+                                textEl.style.textOrientation = 'upright';
+                            }
+                            textEl.setAttribute('transform', `scale(${scaleX}, ${scaleY})`);
+                            textEl.setAttribute('transform-origin', `${centerX} ${centerY}`);
+                        }
                         textEl.setAttribute('class', data.inverted ? 'paper-fill' : 'ink-fill');
                         textEl.style.fontFamily = data.fontFamily;
 
@@ -3310,21 +3436,48 @@
                         textEl.setAttribute('dominant-baseline', 'central');
                         textEl.setAttribute('text-anchor', 'middle');
 
+                        // iPadモード対応
+                        const char = glyph.text || '';
+                        // iPadで回転してしまう文字（90度回転が必要）
+                        const needsRotation = /[）\)］\]｝\}」』】〉》〕›»！？!?‼⁇⁈⁉ー－−‐‑‒–—―〜～・･゠…‥°′″℃￠¢%％‰（\(［\[｛\{「『【〈《〔‹«]/.test(char);
+                        // 句読点（右上に移動が必要）
+                        const isPunctuation = /[、。，．：；]/.test(char);
+
                         if (glyph.type === 'tcy' && isVertical) {
                             textEl.setAttribute('writing-mode', 'horizontal-tb');
+                        } else if (STATE.ipadMode && isVertical) {
+                            if (needsRotation) {
+                                // iPadモード: 回転している文字を90度回転で修正
+                                textEl.setAttribute('writing-mode', 'horizontal-tb');
+                                textEl.setAttribute('x', centerX);
+                                textEl.setAttribute('y', adjustedY);
+                                textEl.setAttribute('transform', `rotate(90 ${centerX} ${adjustedY}) scale(${scaleX}, ${scaleY})`);
+                                textEl.setAttribute('transform-origin', `${centerX} ${adjustedY}`);
+                            } else if (isPunctuation) {
+                                // 句読点は回転していないが右上95%に移動
+                                textEl.setAttribute('writing-mode', 'vertical-rl');
+                                const offset = baseFontSize * 0.475 * scaleX;
+                                const finalX = centerX + offset;
+                                textEl.setAttribute('x', finalX);
+                                textEl.setAttribute('y', adjustedY);
+                                textEl.style.textOrientation = 'upright';
+                                textEl.setAttribute('transform', `scale(${scaleX}, ${scaleY})`);
+                                textEl.setAttribute('transform-origin', `${centerX} ${centerY}`);
+                            } else {
+                                // その他の文字は通常通り
+                                textEl.setAttribute('writing-mode', 'vertical-rl');
+                                textEl.style.textOrientation = 'upright';
+                                textEl.setAttribute('transform', `scale(${scaleX}, ${scaleY})`);
+                                textEl.setAttribute('transform-origin', `${centerX} ${centerY}`);
+                            }
                         } else {
                             textEl.setAttribute('writing-mode', isVertical ? 'vertical-rl' : 'horizontal-tb');
+                            if (needsRotation && isVertical && glyph.type !== 'tcy') {
+                                textEl.style.textOrientation = 'upright';
+                            }
+                            textEl.setAttribute('transform', `scale(${scaleX}, ${scaleY})`);
+                            textEl.setAttribute('transform-origin', `${centerX} ${centerY}`);
                         }
-
-                        // Safari/iOS対策: 句読点や特定の文字を縦書きで正しく表示
-                        const char = glyph.text || '';
-                        const needsRotation = /[、。，．・：；！？（）「」『』【】〈〉《》〔〕［］｛｝]/.test(char);
-                        if (needsRotation && isVertical && glyph.type !== 'tcy') {
-                            textEl.style.textOrientation = 'upright';
-                        }
-
-                        textEl.setAttribute('transform', `scale(${scaleX}, ${scaleY})`);
-                        textEl.setAttribute('transform-origin', `${centerX} ${centerY}`);
                         textEl.setAttribute('class', data.inverted ? 'paper-fill' : 'ink-fill');
                         textEl.style.fontFamily = data.fontFamily;
 
@@ -4838,6 +4991,15 @@
 
                 setupImageDragAndDrop();
 
+                // iPad/iOSデバイスの自動検出
+                if (detectIpadDevice()) {
+                    STATE.ipadMode = true;
+                    updateIpadModeIndicator();
+                }
+
+                // Undo/Redoボタンの初期状態を更新
+                updateHistoryButtons();
+
                 // ローディング画面をフェードアウト
                 loadingScreen.classList.add('hidden');
                 setTimeout(() => {
@@ -5113,6 +5275,9 @@
                 STATE.historyIndex--;
             }
 
+            // ボタンの状態を更新
+            updateHistoryButtons();
+
             // 操作が確定したのでオートセーブを実行
             autoSave(false);
         }
@@ -5130,6 +5295,9 @@
 
             // 選択をクリア
             selectElement(null);
+
+            // ボタンの状態を更新
+            updateHistoryButtons();
         }
 
         function redo() {
@@ -5145,6 +5313,22 @@
 
             // 選択をクリア
             selectElement(null);
+
+            // ボタンの状態を更新
+            updateHistoryButtons();
+        }
+
+        // Undo/Redoボタンの有効/無効を更新
+        function updateHistoryButtons() {
+            const undoBtn = document.getElementById('btn-undo');
+            const redoBtn = document.getElementById('btn-redo');
+
+            if (undoBtn) {
+                undoBtn.disabled = STATE.historyIndex <= 0;
+            }
+            if (redoBtn) {
+                redoBtn.disabled = STATE.historyIndex >= STATE.history.length - 1;
+            }
         }
 
         // ===== オートセーブ機能 =====
@@ -5402,6 +5586,48 @@
                 e.returnValue = ''; // Chrome requires returnValue to be set
             }
         });
+
+        // ===== iPad対応モード =====
+        // iPad/iOSデバイスを検出
+        function detectIpadDevice() {
+            const ua = navigator.userAgent || navigator.vendor || window.opera;
+
+            // iPad検出
+            const isIpad = /iPad/i.test(ua) ||
+                          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+            // iPhone検出
+            const isIphone = /iPhone/i.test(ua);
+
+            // iPod検出
+            const isIpod = /iPod/i.test(ua);
+
+            return isIpad || isIphone || isIpod;
+        }
+
+        // iPadモードの切り替え
+        function toggleIpadMode() {
+            STATE.ipadMode = !STATE.ipadMode;
+            updateIpadModeIndicator();
+
+            // すべての要素を再描画
+            STATE.elements.forEach(data => renderElement(data));
+
+            // 選択されている要素があればUI更新
+            if (STATE.selectedId) {
+                renderUi();
+            }
+        }
+
+        // iPadモードインジケーターの更新
+        function updateIpadModeIndicator() {
+            const btn = document.getElementById('btn-ipad-mode');
+            if (STATE.ipadMode) {
+                btn.classList.add('ipad-mode-active');
+            } else {
+                btn.classList.remove('ipad-mode-active');
+            }
+        }
 
         // ===== キーボードイベントハンドラー =====
         document.addEventListener('keydown', (e) => {
