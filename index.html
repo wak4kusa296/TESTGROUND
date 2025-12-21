@@ -553,7 +553,7 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            z-index: 9999;
+            z-index: 10001;
             transition: opacity 0.3s ease-out;
         }
 
@@ -564,6 +564,14 @@
 
         .loading-content {
             text-align: center;
+        }
+
+        .loading-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            color: var(--masthead);
+            letter-spacing: 0.05em;
         }
 
         .loading-spinner {
@@ -696,6 +704,7 @@
 
     <div id="loading-screen">
         <div class="loading-content">
+            <div class="loading-title" role="heading" aria-level="1">新聞制作ツール</div>
             <div class="loading-spinner"></div>
             <div class="loading-text">読み込み中...</div>
             <div class="loading-subtext">フォントデータを準備しています</div>
@@ -2680,7 +2689,7 @@
                     t.setAttribute('transform', `rotate(90 ${columnCenterX} ${drawY})`);
                     t.setAttribute('x', columnCenterX);
                     t.setAttribute('y', drawY);
-                } else if (isVertical && isPunctuation) {
+                } else if (STATE.ipadMode && isVertical && isPunctuation) {
                     // 句読点は右0.65マス、上0.65マス移動
                     t.setAttribute('writing-mode', data.writingMode || 'vertical-rl');
                     const offsetX = renderCharHeight * 0.65;
@@ -2969,7 +2978,8 @@
                 data = {
                     id, type: 'heading', x: rect.x, y: rect.y, width: rect.w, height: rect.h,
                     text: "見出し", paddingV: 5, paddingH: 5, fontFamily: '"Noto Sans JP", sans-serif',
-                    inverted: false
+                    inverted: false,
+                    textStrokeWidth: 2
                 };
             } else if (STATE.mode === 'masthead') {
                 data = {
@@ -3257,7 +3267,7 @@
                         // iPadモード対応
                         const char = glyph.text || '';
                         // iPadで回転してしまう文字（90度回転が必要）
-                        const needsRotation = /[）\)］\]｝\}」』】〉》〕›»‼⁇⁈⁉ー－−‐‑‒–—―〜～・･゠…‥°′″（\(［\[｛\{「『【〈《〔‹«]/.test(char);
+                        const needsRotation = /[）\)］\]｝\}」』】〉》〕›»‼⁇⁈⁉ー－−‐‑‒–—―〜～・･゠=＝…‥°′″（\(［\[｛\{「『【〈《〔‹«]/.test(char);
                         // 句読点（右0.3マス、上0.8マスに移動）
                         const isPunctuation = /[、。，．]/.test(char);
                         // コロン・セミコロン（常に90度回転）
@@ -3272,7 +3282,7 @@
                             textEl.setAttribute('y', adjustedY);
                             textEl.setAttribute('transform', `rotate(90 ${centerX} ${adjustedY}) scale(${scaleX}, ${scaleY})`);
                             textEl.setAttribute('transform-origin', `${centerX} ${adjustedY}`);
-                        } else if (isVertical && isPunctuation) {
+                        } else if (STATE.ipadMode && isVertical && isPunctuation) {
                             // 句読点は右0.65マス、上0.65マス移動
                             textEl.setAttribute('writing-mode', 'vertical-rl');
                             const offsetX = cellWidth * 0.65 * scaleX;
@@ -3298,6 +3308,13 @@
                             textEl.setAttribute('transform-origin', `${centerX} ${centerY}`);
                         }
                         textEl.setAttribute('class', data.inverted ? 'paper-fill' : 'ink-fill');
+                        const textStrokeWidth = ((data.textStrokeWidth !== undefined ? data.textStrokeWidth : 2)) * PX_PER_MM;
+                        if (data.inverted && textStrokeWidth > 0) {
+                            textEl.setAttribute('paint-order', 'stroke');
+                            const inkColor = STATE.canvas.colors?.ink || '#333333';
+                            textEl.setAttribute('stroke', inkColor);
+                            textEl.setAttribute('stroke-width', textStrokeWidth);
+                        }
                         textEl.style.fontFamily = data.fontFamily;
 
                         group.appendChild(textEl);
@@ -3495,9 +3512,14 @@
 
                         // 白フチ（inverted=falseの時のみ）
                         const textStrokeWidth = (data.textStrokeWidth !== undefined ? data.textStrokeWidth : 2) * PX_PER_MM;
-                        if (!data.inverted) {
+                        if (textStrokeWidth > 0) {
                             textEl.setAttribute('paint-order', 'stroke');
-                            textEl.setAttribute('stroke', '#fff');
+                            if (data.inverted) {
+                                const inkColor = STATE.canvas.colors?.ink || '#333333';
+                                textEl.setAttribute('stroke', inkColor);
+                            } else {
+                                textEl.setAttribute('stroke', '#fff');
+                            }
                             textEl.setAttribute('stroke-width', textStrokeWidth);
                         }
 
