@@ -2681,10 +2681,10 @@
                     t.setAttribute('x', columnCenterX);
                     t.setAttribute('y', drawY);
                 } else if (isVertical && isPunctuation) {
-                    // 句読点は左0.8マス、下0.4マス移動
+                    // 句読点は右0.8マス、上0.8マス移動
                     t.setAttribute('writing-mode', data.writingMode || 'vertical-rl');
-                    const offsetX = -renderCharHeight * 0.8;
-                    const offsetY = renderCharHeight * 0.4;
+                    const offsetX = renderCharHeight * 0.8;
+                    const offsetY = -renderCharHeight * 0.8;
                     t.setAttribute('x', columnCenterX + offsetX);
                     t.setAttribute('y', drawY + offsetY);
                     t.style.textOrientation = 'upright';
@@ -3273,10 +3273,10 @@
                             textEl.setAttribute('transform', `rotate(90 ${centerX} ${adjustedY}) scale(${scaleX}, ${scaleY})`);
                             textEl.setAttribute('transform-origin', `${centerX} ${adjustedY}`);
                         } else if (isVertical && isPunctuation) {
-                            // 句読点は左0.8マス、下0.4マス移動
+                            // 句読点は右0.8マス、上0.8マス移動
                             textEl.setAttribute('writing-mode', 'vertical-rl');
-                            const offsetX = -cellWidth * -0.1 * scaleX;
-                            const offsetY = cellHeight * -0.1 * scaleY;
+                            const offsetX = cellWidth * 0.8 * scaleX;
+                            const offsetY = -cellHeight * 0.8 * scaleY;
                             textEl.setAttribute('x', centerX + offsetX);
                             textEl.setAttribute('y', adjustedY + offsetY);
                             textEl.style.textOrientation = 'upright';
@@ -3466,10 +3466,10 @@
                             textEl.setAttribute('transform', `rotate(90 ${centerX} ${adjustedY}) scale(${scaleX}, ${scaleY})`);
                             textEl.setAttribute('transform-origin', `${centerX} ${adjustedY}`);
                         } else if (isVertical && isPunctuation) {
-                            // 句読点は左0.8マス、下0.4マス移動
+                            // 句読点は右0.8マス、上0.8マス移動
                             textEl.setAttribute('writing-mode', 'vertical-rl');
-                            const offsetX = -cellWidth * -0.1 * scaleX;
-                            const offsetY = cellHeight * -0.1 * scaleY;
+                            const offsetX = cellWidth * 0.8 * scaleX;
+                            const offsetY = -cellHeight * 0.8 * scaleY;
                             textEl.setAttribute('x', centerX + offsetX);
                             textEl.setAttribute('y', adjustedY + offsetY);
                             textEl.style.textOrientation = 'upright';
