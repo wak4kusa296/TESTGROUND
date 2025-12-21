@@ -2598,6 +2598,15 @@
                 t.setAttribute('text-anchor', 'middle');
                 t.setAttribute('dominant-baseline', 'central');
                 t.setAttribute('font-size', fontSize);
+
+                // Safari/iOS対策: 句読点や特定の文字を縦書きで正しく表示
+                const char = token.char || '';
+                const needsRotation = /[、。，．・：；！？（）「」『』【】〈〉《》〔〕［］｛｝]/. test(char);
+                if (needsRotation && (data.writingMode === 'vertical-rl' || !data.writingMode)) {
+                    // text-orientationを追加してグリフの向きを制御
+                    t.style.textOrientation = 'upright';
+                }
+
                 segGroup.appendChild(t);
 
                 y += renderCharHeight + gapAdjust + extraPerGap;
@@ -3142,6 +3151,13 @@
                         if (glyph.type === 'tcy' && isVertical) textEl.setAttribute('writing-mode', 'horizontal-tb');
                         else textEl.setAttribute('writing-mode', isVertical ? 'vertical-rl' : 'horizontal-tb');
 
+                        // Safari/iOS対策: 句読点や特定の文字を縦書きで正しく表示
+                        const char = glyph.text || '';
+                        const needsRotation = /[、。，．・：；！？（）「」『』【】〈〉《》〔〕［］｛｝]/.test(char);
+                        if (needsRotation && isVertical && glyph.type !== 'tcy') {
+                            textEl.style.textOrientation = 'upright';
+                        }
+
                         textEl.setAttribute('transform', `scale(${scaleX}, ${scaleY})`);
                         textEl.setAttribute('transform-origin', `${centerX} ${centerY}`);
                         textEl.setAttribute('class', data.inverted ? 'paper-fill' : 'ink-fill');
@@ -3298,6 +3314,13 @@
                             textEl.setAttribute('writing-mode', 'horizontal-tb');
                         } else {
                             textEl.setAttribute('writing-mode', isVertical ? 'vertical-rl' : 'horizontal-tb');
+                        }
+
+                        // Safari/iOS対策: 句読点や特定の文字を縦書きで正しく表示
+                        const char = glyph.text || '';
+                        const needsRotation = /[、。，．・：；！？（）「」『』【】〈〉《》〔〕［］｛｝]/.test(char);
+                        if (needsRotation && isVertical && glyph.type !== 'tcy') {
+                            textEl.style.textOrientation = 'upright';
                         }
 
                         textEl.setAttribute('transform', `scale(${scaleX}, ${scaleY})`);
@@ -4710,14 +4733,13 @@
                 svgClone.querySelector('defs').appendChild(dynamicStyleEl);
 
                 const svgData = new XMLSerializer().serializeToString(svgClone);
-                const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
+                const svgDataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData);
 
                 const img = new Image();
+                img.crossOrigin = 'anonymous';
                 img.onload = () => {
                     // 初回は書き出しをスキップして、2回目を自動実行
                     if (!isRetry) {
-                        URL.revokeObjectURL(url);
                         // 少し待ってから2回目を実行
                         setTimeout(() => {
                             exportCanvas(true);
@@ -4741,7 +4763,6 @@
                     a.download = 'newspaper.png';
                     a.click();
 
-                    URL.revokeObjectURL(url);
                     btn.textContent = originalText;
                     btn.disabled = false;
                     layerUi.style.display = 'block';
@@ -4749,7 +4770,6 @@
                 };
                 img.onerror = () => {
                     console.error("Image loading for export failed.");
-                    URL.revokeObjectURL(url);
                     btn.textContent = "エラー";
                     setTimeout(() => {
                         btn.textContent = originalText;
@@ -4758,7 +4778,7 @@
                     layerUi.style.display = 'block';
                     layerPaperGrid.style.display = 'block';
                 };
-                img.src = url;
+                img.src = svgDataUri;
 
             } catch (e) {
                 console.error("Export failed:", e);
